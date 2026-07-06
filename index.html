@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Piano Kids ⭐ Twinkle Twinkle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="menu">
+        <h1 class="menu-title">🎹 Piano Kids</h1>
+        <p class="menu-sub">Pick a song and play along!</p>
+        <div id="profiles" aria-label="Who's playing?"></div>
+        <div id="courses"></div>
+      </div>
+
+      <div id="playview" class="hidden">
+      <header>
+        <div class="hleft">
+          <button id="back" aria-label="Back to menu">←</button>
+          <h1 id="lessonTitle">Piano Kids</h1>
+        </div>
+        <div class="hmid">
+          <div id="sources">
+            <button class="src" data-src="screen">👆 Tap</button>
+            <button class="src" data-src="midi">🎹 USB MIDI</button>
+            <button class="src" data-src="mic">🎤 Mic</button>
+          </div>
+          <label id="speed">🐢<input type="range" id="speedRange" min="0.25" max="1.5" step="0.25" value="0.75" /><span id="speedVal">0.75×</span>🐇</label>
+          <button id="skipIntroBtn" class="opt" title="Skip the teaching intro in every lesson">⏭ Skip intro</button>
+          <button id="abcBtn" class="opt" title="Show or hide the letters on the notes">🔤 ABC</button>
+        </div>
+        <div class="hright">
+          <div class="progress"><div id="progressFill"></div><span id="progressText">0/0</span></div>
+          <button id="play">▶ Play</button>
+        </div>
+      </header>
+
+      <nav id="lessons" aria-label="Lessons"></nav>
+
+      <main>
+        <div class="sheet" id="sheet">
+          <div id="legend">
+            <span>Letters name the keys</span>
+            <svg viewBox="0 0 30 52" aria-hidden="true"><g transform="translate(13 42)"><ellipse rx="9" ry="6.5" transform="rotate(-18)"/><line x1="8.4" y1="-2.5" x2="8.4" y2="-34"/></g></svg>
+            <span>short note</span>
+            <svg viewBox="0 0 30 52" aria-hidden="true"><g transform="translate(13 42)"><ellipse class="open" rx="9" ry="6.5" transform="rotate(-18)"/><line x1="8.4" y1="-2.5" x2="8.4" y2="-34"/></g></svg>
+            <span>long note</span>
+          </div>
+        </div>
+        <div id="loopHint">Drag the notes to seek · drag in the top/bottom margin to select a practice loop · tap the margin to clear it</div>
+        <div id="keyIntro" class="hidden"></div>
+        <div id="quiz" class="hidden"></div>
+        <div id="hand" aria-label="Finger guide"></div>
+        <div id="tutor" role="status"></div>
+        <div id="micReadout" class="hidden">🎤 listening…</div>
+      </main>
+
+      <div id="kb" aria-label="Piano keyboard"></div>
+      </div><!-- /playview -->
+
+      <div id="overlay" class="hidden"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

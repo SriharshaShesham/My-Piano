@@ -43,5 +43,5 @@ Wiring (already done, for reference):
 5. Production: store the same value as an Actions secret in piano-kids —
    `gh secret set VITE_GOOGLE_CLIENT_ID` — then re-run the deploy workflow.
 
-Without the client ID the app works fully in guest (local-only) mode; the
-sign-in button simply stays hidden.
+Without the client ID the app works fully with local profiles only; the
+"Sign in with Google" option simply never appears in the add-profile chooser.

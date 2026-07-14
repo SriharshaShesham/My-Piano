@@ -1,31 +1,45 @@
-// Google Drive appDataFolder sync via Google Identity Services (token flow).
-// Guest-safe by design: no client id, blocked script, declined consent, or
-// being offline all leave the app fully working on localStorage alone.
-import { setOnLocalChange } from './curriculum';
+// Google auth + per-profile Drive sync (Google Identity Services token flow).
+// A profile IS an identity: signing in with Google creates/opens the profile
+// for that account (g<sub>) and syncs ONLY that profile's data to that
+// account's private appDataFolder. Local profiles never touch the network.
+// Guest-safe: no client id, blocked script, declined consent, offline — the
+// app keeps working on localStorage alone.
+import {
+  setOnLocalChange, activeProfile, upsertGoogleProfile, removeProfile,
+  updateProfile, profileKeys, type Profile, type Settings,
+} from './curriculum';
 
 const FILE = 'piano-kids.json';
-const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-const SIGNED_KEY = 'piano-google'; // '1' = user signed in before → silent resume
+const SCOPE = 'openid email profile https://www.googleapis.com/auth/drive.appdata';
 
-export type SyncStatus = 'ready' | 'syncing' | 'synced' | 'error';
-type Payload = { updatedAt: number; keys: Record<string, string> };
+export type SyncStatus = 'ready' | 'syncing' | 'synced' | 'offline' | 'error';
+
+type Payload = {
+  updatedAt: number; // ponytail: global piano-updated-at stamp; per-profile stamps if settings ping-pong across devices
+  profile: { name: string; picture?: string };
+  settings: Settings;
+  progress: Record<string, Record<number, number>>;
+  daily: { date: string; done: string[] };
+};
 
 let tokenClient: any = null;
 let token = '';
 let tokenExp = 0;
-let fileId = '';
+let tokenSub = ''; // which Google account the token belongs to
+let fileId = '';   // Drive file id — valid per account; cleared on account switch
 let pushT = 0;
 let onStatus: (s: SyncStatus) => void = () => {};
 let onRemoteChange: () => void = () => {};
 
-export function initSync(opts: {
+export function initAuth(opts: {
   clientId?: string;
   onStatus?: (s: SyncStatus) => void;
   onRemoteChange?: () => void;
 }) {
   onStatus = opts.onStatus ?? onStatus;
   onRemoteChange = opts.onRemoteChange ?? onRemoteChange;
-  if (!opts.clientId) return; // no OAuth client configured → guest mode
+  localStorage.removeItem('piano-google'); // pre-identity global flag, obsolete
+  if (!opts.clientId) return; // no OAuth client configured → local-only
   const s = document.createElement('script');
   s.src = 'https://accounts.google.com/gsi/client';
   s.onload = () => {
@@ -36,67 +50,107 @@ export function initSync(opts: {
     });
     if (!tokenClient) return;
     setOnLocalChange(schedulePush); // every persisted change → debounced push
-    onStatus('ready'); // gate may show the sign-in button now
-    if (localStorage.getItem(SIGNED_KEY) === '1') {
-      ensureToken(false).then((t) => { if (t) fullSync(); }); // silent resume
-    }
+    onStatus('ready'); // choosers may show the Google option now
   };
-  s.onerror = () => {}; // offline / blocked → stay guest, silently
+  s.onerror = () => {}; // offline / blocked → local-only, silently
   document.head.appendChild(s);
 }
 
-/** Interactive sign-in from the gate button. Resolves false if declined. */
-export async function signIn(): Promise<boolean> {
-  const t = await ensureToken(true);
-  if (!t) return false;
-  localStorage.setItem(SIGNED_KEY, '1');
-  await fullSync();
-  return true;
-}
+/* ---------- tokens + identity ---------- */
 
-function ensureToken(interactive: boolean): Promise<string | null> {
-  if (token && Date.now() < tokenExp - 60_000) return Promise.resolve(token);
+function requestToken(interactive: boolean, hint?: string): Promise<string | null> {
   if (!tokenClient) return Promise.resolve(null);
   return new Promise((res) => {
-    tokenClient.callback = (r: any) => {
-      if (r?.access_token) {
-        token = r.access_token;
-        tokenExp = Date.now() + (r.expires_in ?? 3600) * 1000;
-        res(token);
-      } else res(null);
+    tokenClient.callback = async (r: any) => {
+      if (!r?.access_token) { res(null); return; }
+      token = r.access_token;
+      tokenExp = Date.now() + (r.expires_in ?? 3600) * 1000;
+      tokenSub = ''; // unknown until userinfo confirms
+      res(token);
     };
     tokenClient.error_callback = () => res(null);
     try {
-      tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+      const opts: any = hint ? { login_hint: hint } : {};
+      if (!interactive) opts.prompt = ''; // silent: no UI, fails without a live Google session
+      tokenClient.requestAccessToken(opts);
     } catch {
       res(null);
     }
   });
 }
 
-/** Drive fetch with one silent re-auth retry on 401/expiry. */
+async function fetchUserinfo(): Promise<{ sub: string; name: string; picture?: string; email?: string } | null> {
+  const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => null);
+  if (!r?.ok) return null;
+  const u = await r.json().catch(() => null);
+  if (!u?.sub) return null;
+  tokenSub = u.sub;
+  return u;
+}
+
+/** Token valid for this specific Google profile; silent first, then interactive. */
+async function ensureTokenFor(p: Profile, allowInteractive: boolean): Promise<boolean> {
+  if (token && Date.now() < tokenExp - 60_000 && tokenSub === p.id.slice(1)) return true;
+  for (const interactive of allowInteractive ? [false, true] : [false]) {
+    if (!(await requestToken(interactive, p.email))) continue;
+    const u = await fetchUserinfo();
+    if (u && `g${u.sub}` === p.id) return true; // right account confirmed
+    token = ''; // wrong account picked in the chooser → try interactively
+  }
+  return false;
+}
+
+/* ---------- public auth API ---------- */
+
+/** Interactive sign-in from the chooser: token → identity → profile. */
+export async function signInWithGoogle(): Promise<Profile | null> {
+  if (!(await requestToken(true))) return null;
+  const u = await fetchUserinfo();
+  if (!u) return null;
+  fileId = ''; // possibly a different account than last time
+  const p = upsertGoogleProfile({ sub: u.sub, name: u.name ?? u.email ?? 'Player', picture: u.picture, email: u.email });
+  await fullSync(p);
+  return p;
+}
+
+/** Wake a Google profile tapped on the gate. Resolves fast; sync runs after.
+ *  'offline' = auth failed — kid still plays with locally cached data. */
+export async function activateProfile(p: Profile, allowInteractive = true): Promise<'ok' | 'offline'> {
+  if (p.kind !== 'google') return 'ok';
+  fileId = ''; // account may differ from the previous active one
+  if (!(await ensureTokenFor(p, allowInteractive))) { onStatus('offline'); return 'offline'; }
+  await fullSync(p);
+  return 'ok';
+}
+
+/** Sign out: best-effort revoke, remove the card. Local data stays orphaned. */
+export function signOutGoogle(p: Profile) {
+  try {
+    if (token) (window as any).google?.accounts?.oauth2?.revoke?.(token, () => {});
+  } catch { /* token already dead — fine */ }
+  token = '';
+  tokenSub = '';
+  fileId = '';
+  removeProfile(p.id);
+}
+
+/* ---------- Drive REST (plain fetch, 401 retried once) ---------- */
+
 async function drive(path: string, init: RequestInit = {}): Promise<Response | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const t = await ensureToken(false);
-    if (!t) return null;
+    const p = activeProfile();
+    if (p.kind !== 'google' || !(await ensureTokenFor(p, false))) return null;
     const r = await fetch(`https://www.googleapis.com${path}`, {
       ...init,
-      headers: { ...(init.headers as Record<string, string> ?? {}), Authorization: `Bearer ${t}` },
+      headers: { ...(init.headers as Record<string, string> ?? {}), Authorization: `Bearer ${token}` },
     }).catch(() => null);
     if (!r) return null;
     if (r.status === 401) { token = ''; continue; }
     return r;
   }
   return null;
-}
-
-function snapshot(): Payload {
-  const keys: Record<string, string> = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i)!;
-    if (k.startsWith('piano-') && k !== SIGNED_KEY) keys[k] = localStorage.getItem(k)!;
-  }
-  return { updatedAt: Number(localStorage.getItem('piano-updated-at') ?? 0), keys };
 }
 
 async function findFile(): Promise<string> {
@@ -114,9 +168,56 @@ async function pull(): Promise<Payload | null> {
   return r?.ok ? r.json().catch(() => null) : null;
 }
 
-async function push() {
+/* ---------- per-profile snapshot / merge / push ---------- */
+
+const readJSON = <T,>(key: string, fallback: T): T => {
+  try { return JSON.parse(localStorage.getItem(key) ?? '') ?? fallback; } catch { return fallback; }
+};
+
+function snapshot(p: Profile): Payload {
+  const k = profileKeys(p.id);
+  return {
+    updatedAt: Number(localStorage.getItem('piano-updated-at') ?? 0),
+    profile: { name: p.name, picture: p.picture },
+    settings: readJSON<Settings>(k.settings, {}),
+    progress: readJSON(k.progress, {}),
+    daily: readJSON(k.daily, { date: '', done: [] }),
+  };
+}
+
+/** Progress can only grow (per-section max); daily unions same-day;
+ *  settings + name are last-write-wins on the updatedAt stamp. */
+function mergeRemote(p: Profile, remote: Payload) {
+  if (!remote || 'keys' in (remote as any)) return; // pre-identity format: superseded on next push
+  const k = profileKeys(p.id);
+  const localAt = Number(localStorage.getItem('piano-updated-at') ?? 0);
+  const remoteWins = (remote.updatedAt ?? 0) > localAt;
+
+  const prog = readJSON<Record<string, Record<number, number>>>(k.progress, {});
+  for (const song of Object.keys(remote.progress ?? {})) {
+    prog[song] ??= {};
+    for (const sec of Object.keys(remote.progress[song])) {
+      prog[song][+sec] = Math.max(prog[song][+sec] ?? 0, remote.progress[song][+sec]);
+    }
+  }
+  localStorage.setItem(k.progress, JSON.stringify(prog));
+
+  const daily = readJSON<{ date: string; done: string[] }>(k.daily, { date: '', done: [] });
+  const rd = remote.daily ?? { date: '', done: [] };
+  if (daily.date === rd.date) daily.done = [...new Set([...daily.done, ...rd.done])];
+  else if ((rd.date ?? '') > (daily.date ?? '')) Object.assign(daily, rd);
+  localStorage.setItem(k.daily, JSON.stringify(daily));
+
+  if (remoteWins) {
+    localStorage.setItem(k.settings, JSON.stringify(remote.settings ?? {}));
+    if (remote.profile?.name) updateProfile(p.id, { name: remote.profile.name });
+    localStorage.setItem('piano-updated-at', String(remote.updatedAt));
+  }
+}
+
+async function push(p: Profile) {
   onStatus('syncing');
-  const body = JSON.stringify(snapshot());
+  const body = JSON.stringify(snapshot(p));
   const id = await findFile();
   let ok = false;
   if (id) {
@@ -136,57 +237,22 @@ async function push() {
     });
     if (r?.ok) { fileId = (await r.json()).id; ok = true; }
   }
-  onStatus(ok ? 'synced' : 'error');
+  onStatus(ok ? 'synced' : 'error'); // error is soft — next change retries
 }
 
 function schedulePush() {
-  if (localStorage.getItem(SIGNED_KEY) !== '1' || !tokenClient) return;
+  const p = activeProfile();
+  if (p.kind !== 'google' || !tokenClient) return; // local profiles never sync
   clearTimeout(pushT);
-  pushT = window.setTimeout(push, 3000); // debounce bursts of writes
+  pushT = window.setTimeout(() => push(activeProfile()), 3000);
 }
 
-/** Merge remote into localStorage. Progress can only grow (per-section max),
- *  daily practice unions same-day, everything else is last-write-wins. */
-function mergeRemote(remote: Payload) {
-  const localAt = Number(localStorage.getItem('piano-updated-at') ?? 0);
-  const remoteWins = remote.updatedAt > localAt;
-  for (const [k, v] of Object.entries(remote.keys ?? {})) {
-    const local = localStorage.getItem(k);
-    if (local == null) { localStorage.setItem(k, v); continue; }
-    if (local === v) continue;
-    try {
-      if (k.startsWith('piano-progress-')) {
-        const a = JSON.parse(local), b = JSON.parse(v);
-        for (const song of Object.keys(b)) {
-          a[song] ??= {};
-          for (const sec of Object.keys(b[song])) a[song][sec] = Math.max(a[song][sec] ?? 0, b[song][sec]);
-        }
-        localStorage.setItem(k, JSON.stringify(a));
-      } else if (k.startsWith('piano-daily-')) {
-        const a = JSON.parse(local), b = JSON.parse(v);
-        if (a.date === b.date) a.done = [...new Set([...(a.done ?? []), ...(b.done ?? [])])];
-        else if ((b.date ?? '') > (a.date ?? '')) Object.assign(a, b);
-        localStorage.setItem(k, JSON.stringify(a));
-      } else if (k === 'piano-profiles') {
-        const a = JSON.parse(local), b = JSON.parse(v);
-        const win = remoteWins ? b : a;
-        const lose = remoteWins ? a : b;
-        const ids = new Set(win.map((p: any) => p.id));
-        localStorage.setItem(k, JSON.stringify([...win, ...lose.filter((p: any) => !ids.has(p.id))]));
-      } else if (k !== 'piano-updated-at' && remoteWins) {
-        localStorage.setItem(k, v); // settings / active profile: LWW
-      }
-    } catch { /* malformed remote entry → keep local */ }
-  }
-  localStorage.setItem('piano-updated-at', String(Math.max(localAt, remote.updatedAt)));
-}
-
-async function fullSync() {
+async function fullSync(p: Profile) {
   onStatus('syncing');
   const remote = await pull();
   if (remote) {
-    mergeRemote(remote);
+    mergeRemote(p, remote);
     onRemoteChange();
   }
-  await push();
+  await push(p);
 }

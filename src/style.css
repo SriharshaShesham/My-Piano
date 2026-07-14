@@ -49,11 +49,11 @@ body {
   gap: 12px;
 }
 #gateProfiles .profile .pavatar { font-size: 52px; }
-#gateProfiles .profile.add { font-size: 40px; padding: 26px 40px; justify-content: center; }
-.gate-foot { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 24px; }
+#gateProfiles .profile.add { padding: 26px 40px; justify-content: center; }
 .gbtn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   background: #fff;
   color: #3c4043;
@@ -64,8 +64,41 @@ body {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 .gbtn:hover { transform: translateY(-1px); }
-.gbtn.hidden, #syncStatus.hidden { display: none; }
-#syncStatus { font-size: 14px; opacity: 0.85; }
+/* keep the white look inside the overlay card (its buttons default to teal) */
+.card .gbtn { background: #fff; color: #3c4043; font-size: 15px; padding: 11px 22px; }
+
+/* add-profile chooser (overlay card + gate empty state) */
+.chooser-btns { display: flex; flex-direction: column; gap: 12px; align-items: center; margin: 18px 0 6px; }
+.chooser-btns .gbtn { min-width: 240px; }
+.chooser-warn {
+  font-size: 13px;
+  opacity: 0.8;
+  max-width: 40ch;
+  margin: 10px auto 0;
+  line-height: 1.45;
+}
+/* google profile avatars: round photo + G badge */
+.pavatar.gphoto { position: relative; display: inline-flex; }
+.pavatar img { width: 1em; height: 1em; border-radius: 50%; object-fit: cover; display: block; }
+.gbadge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gbadge svg { width: 11px; height: 11px; }
+
+#cloudChip { font-size: 13px; cursor: default; }
+#cloudChip.clickable { cursor: pointer; background: #ffd43b; color: #4a3800; font-weight: 600; }
+#cloudChip.hidden { display: none; }
+#ppSignOut:hover { background: #ff8787; color: #4a0f0f; }
+#ppSignOut.hidden, #ppWarn.hidden { display: none; }
 
 /* ---------- Landing ---------- */
 #landing {

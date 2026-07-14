@@ -134,8 +134,15 @@ export const SONGS: SongEntry[] = [
   happyBirthday,
 ];
 
-/* ---------- profiles (multiple kids, one device — pure localStorage) ---------- */
-export type Profile = { id: string; name: string; emoji: string };
+/* ---------- profiles: identities — Google-backed or local ---------- */
+export type Profile = {
+  id: string;          // local: p<timestamp> | google: g<sub>
+  name: string;
+  emoji?: string;      // local avatar
+  kind?: 'google';     // absent = local (legacy profiles migrate for free)
+  email?: string;      // google: login_hint for silent re-auth
+  picture?: string;    // google: avatar URL
+};
 const PROFILES_KEY = 'piano-profiles';
 const ACTIVE_KEY = 'piano-active-profile';
 export const AVATARS = ['🐻', '🦊', '🐰', '🐸', '🦁', '🐼', '🐨', '🐷'];
@@ -158,17 +165,15 @@ export function getProfiles(): Profile[] {
   return readJSON<Profile[]>(PROFILES_KEY, []);
 }
 
+// In-memory fallback when no profile exists/is selected (debug-param bypass
+// only) — never persisted, never shown on the gate. Its settings/progress
+// land in orphaned `-guest` keys that are never synced.
+const GUEST: Profile = { id: 'guest', name: 'Guest', emoji: '🐻' };
+
 export function activeProfile(): Profile {
-  let ps = getProfiles();
-  if (!ps.length) {
-    ps = [{ id: 'p1', name: 'Player 1', emoji: AVATARS[0] }];
-    persist(PROFILES_KEY, JSON.stringify(ps));
-    // adopt any pre-profile progress so nobody loses their stars
-    const legacy = localStorage.getItem('piano-progress');
-    if (legacy) persist(progressKey('p1'), legacy);
-  }
+  const ps = getProfiles();
   const id = localStorage.getItem(ACTIVE_KEY);
-  return ps.find((p) => p.id === id) ?? ps[0];
+  return ps.find((p) => p.id === id) ?? ps[0] ?? GUEST;
 }
 
 export function setActiveProfile(id: string) {
@@ -187,6 +192,37 @@ export function updateProfile(id: string, patch: Partial<Omit<Profile, 'id'>>) {
   const ps = getProfiles().map((p) => (p.id === id ? { ...p, ...patch } : p));
   persist(PROFILES_KEY, JSON.stringify(ps));
 }
+
+/** One Google account = one profile. Re-sign-in updates in place (and finds
+ *  its orphaned progress keys again, since keys derive from the id). */
+export function upsertGoogleProfile(u: { sub: string; name: string; picture?: string; email?: string }): Profile {
+  const id = `g${u.sub}`;
+  const ps = getProfiles();
+  const i = ps.findIndex((p) => p.id === id);
+  if (i >= 0) {
+    // keep a locally edited name; refresh photo/email from Google
+    ps[i] = { ...ps[i], kind: 'google', picture: u.picture, email: u.email };
+  } else {
+    ps.push({ id, name: u.name, kind: 'google', picture: u.picture, email: u.email });
+  }
+  persist(PROFILES_KEY, JSON.stringify(ps));
+  setActiveProfile(id);
+  return ps.find((p) => p.id === id)!;
+}
+
+/** Sign-out: the card disappears; settings/progress/daily keys stay orphaned
+ *  so re-signing in with the same account restores and merges them. */
+export function removeProfile(id: string) {
+  persist(PROFILES_KEY, JSON.stringify(getProfiles().filter((p) => p.id !== id)));
+  if (localStorage.getItem(ACTIVE_KEY) === id) localStorage.removeItem(ACTIVE_KEY);
+}
+
+/** localStorage key names for one profile's data (used by per-profile sync). */
+export const profileKeys = (pid: string) => ({
+  settings: `piano-settings-${pid}`,
+  progress: progressKey(pid),
+  daily: `piano-daily-${pid}`,
+});
 
 /* ---------- per-profile settings ---------- */
 export type Settings = { speed?: number; source?: string; skipIntro?: boolean; noteLabels?: boolean; videos?: boolean };

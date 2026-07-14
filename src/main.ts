@@ -3,8 +3,8 @@ import { Game } from './game';
 import { Staff, STAFF_H, PX_PER_SEC } from './staff';
 import { Keys } from './domkeyboard';
 import { Synth } from './audio';
-import { SONGS, DRILLS, savePoints, getPoints, getProfiles, activeProfile, setActiveProfile, addProfile, updateProfile, loadSettings, saveSettings, getDailyDone, markDrillDone } from './curriculum';
-import { initSync, signIn } from './sync';
+import { SONGS, DRILLS, savePoints, getPoints, getProfiles, activeProfile, setActiveProfile, addProfile, updateProfile, loadSettings, saveSettings, getDailyDone, markDrillDone, type Profile } from './curriculum';
+import { initAuth, signInWithGoogle, activateProfile as activateAuth, signOutGoogle } from './sync';
 import { Hand, fingerFor, FINGER_NAMES, noteLabel } from './hand';
 import { Tutor, type TutorScript } from './tutor';
 import { Coach } from './coach';
@@ -355,34 +355,85 @@ function buildIntro(si: number, sec: number): TutorScript {
   return { intro, introAudio, demo };
 }
 
-/* ---------- profile gate (launch screen) ---------- */
+/* ---------- profile gate (launch screen) + add-profile chooser ---------- */
+let googleReady = false; // GIS loaded + client id configured
+
+const G_SVG = `<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.5l6.2 5.2C41.3 34.9 44 30 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>`;
+const LOCAL_WARN = "A local profile lives only in this browser — clearing browser data erases it, and it won't follow you to other devices. Sign in with Google to keep progress safe.";
+
+/** Round photo + Google badge for google profiles, emoji for local. */
+function avatarHTML(p: Profile) {
+  return p.picture
+    ? `<span class="pavatar gphoto"><img src="${p.picture}" alt="" referrerpolicy="no-referrer"><span class="gbadge">${G_SVG}</span></span>`
+    : `<span class="pavatar">${p.emoji ?? '👤'}</span>`;
+}
+
+function chooserContent() {
+  return `
+    <div class="chooser-btns">
+      ${googleReady ? `<button class="gbtn ch-google">${G_SVG} Sign in with Google</button>` : ''}
+      <button class="gbtn ch-local">🐻 Local profile</button>
+    </div>
+    <p class="chooser-warn">${LOCAL_WARN}</p>`;
+}
+
+function wireChooser(root: HTMLElement) {
+  root.querySelector('.ch-google')?.addEventListener('click', googleSignInFlow);
+  root.querySelector('.ch-local')?.addEventListener('click', localCreateFlow);
+}
+
+async function googleSignInFlow() {
+  overlay.classList.add('hidden');
+  ctx.resume(); // the click is the audio-unlock gesture
+  const p = await signInWithGoogle(); // interactive: popup happens inside the gesture
+  if (!p) { showGate(); return; } // declined/blocked — back to the gate
+  applySettings();
+  showLanding();
+}
+
+function localCreateFlow() {
+  const name = prompt("What's your name?")?.trim();
+  if (!name) return;
+  overlay.classList.add('hidden');
+  addProfile(name.slice(0, 12));
+  ctx.resume();
+  applySettings();
+  showLanding();
+}
+
+function showChooser() {
+  overlay.innerHTML = `
+    <div class="card">
+      <h2>Add a player</h2>
+      ${chooserContent()}
+      <div class="card-btns"><button id="chCancel">CANCEL</button></div>
+    </div>`;
+  overlay.classList.remove('hidden');
+  wireChooser(overlay);
+  document.getElementById('chCancel')!.addEventListener('click', () => overlay.classList.add('hidden'));
+}
+
 function renderGate() {
-  activeProfile(); // creates the first profile on first run
+  const ps = getProfiles();
   gateProfilesEl.innerHTML = '';
-  getProfiles().forEach((p) => {
+  ps.forEach((p) => {
     const b = document.createElement('button');
     b.className = 'profile';
-    b.innerHTML = `<span class="pavatar">${p.emoji}</span>${p.name}`;
+    b.innerHTML = `${avatarHTML(p)}${p.name}`;
     b.addEventListener('click', () => {
       setActiveProfile(p.id);
       ctx.resume(); // the gate tap is the gesture that unlocks audio
       applySettings();
-      showLanding();
+      showLanding(); // enter immediately on cached data…
+      activateAuth(p); // …auth + sync catch up in the background (google only)
     });
     gateProfilesEl.appendChild(b);
   });
   const add = document.createElement('button');
   add.className = 'profile add';
-  add.textContent = '＋';
+  add.innerHTML = `<span class="pavatar">＋</span>${ps.length ? '' : 'Add a player'}`;
   add.title = 'Add a player';
-  add.addEventListener('click', () => {
-    const name = prompt("What's your name?")?.trim();
-    if (!name) return;
-    addProfile(name.slice(0, 12));
-    ctx.resume();
-    applySettings();
-    showLanding();
-  });
+  add.addEventListener('click', showChooser); // ＋ is the only way in — never auto-prompt
   gateProfilesEl.appendChild(add);
 }
 
@@ -394,7 +445,7 @@ function applySettings() {
   game.setSpeed(sp);
   chooseSource(s.source ?? 'screen', true);
   applyToggles();
-  document.getElementById('pvAvatar')!.textContent = activeProfile().emoji;
+  document.getElementById('pvAvatar')!.innerHTML = avatarHTML(activeProfile());
 }
 
 /* ---------- persisted option toggles (managed on the profile page) ---------- */
@@ -509,7 +560,8 @@ function continueTarget(): [number, number] | null {
 
 function renderLanding() {
   const p = activeProfile();
-  landingAvatar.innerHTML = `<span class="pavatar">${p.emoji}</span>${p.name}`;
+  landingAvatar.innerHTML = `${avatarHTML(p)}${p.name}`;
+  cloudChip.classList.toggle('hidden', p.kind !== 'google');
   const total = SONGS.reduce((n, s) => n + s.sections.length, 0) * 20;
   const earned = SONGS.reduce((n, s) => n + s.sections.reduce((m, _, i) => m + getPoints(s.id, i), 0), 0);
   const pct = Math.round((earned / total) * 100);
@@ -553,15 +605,26 @@ function setToggle(el: HTMLElement, on: boolean) {
   el.querySelector('.state')!.textContent = on ? 'On' : 'Off';
 }
 
+const ppSignOut = document.getElementById('ppSignOut')!;
+const ppWarn = document.getElementById('ppWarn')!;
+
 function renderProfilePage() {
   const p = activeProfile();
-  ppTitle.textContent = `${p.emoji} ${p.name}`;
+  ppTitle.innerHTML = `${avatarHTML(p)} ${p.name}`;
   ppName.value = p.name;
   const s = loadSettings();
   setToggle(ppTutorial, !s.skipIntro); // Tutorial mode = intro NOT skipped
   setToggle(ppLetters, s.noteLabels !== false);
   setToggle(ppVideos, s.videos !== false);
+  ppSignOut.classList.toggle('hidden', p.kind !== 'google');
+  ppWarn.classList.toggle('hidden', p.kind === 'google');
+  ppWarn.textContent = LOCAL_WARN;
 }
+
+ppSignOut.addEventListener('click', () => {
+  signOutGoogle(activeProfile()); // revoke + remove the card; data stays in Drive
+  showGate();
+});
 
 ppName.addEventListener('change', () => {
   const name = ppName.value.trim().slice(0, 12);
@@ -756,23 +819,34 @@ staff.svg.addEventListener('pointerup', () => {
   mode = null;
 });
 
-/* ---------- cloud sync (Google Drive appDataFolder; guest-safe) ---------- */
-const googleBtn = document.getElementById('googleBtn')!;
-const syncStatus = document.getElementById('syncStatus')!;
-initSync({
+/* ---------- auth + per-profile cloud sync (guest-safe) ---------- */
+const cloudChip = document.getElementById('cloudChip')!;
+initAuth({
   clientId: (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID,
   onStatus: (s) => {
-    if (s === 'ready') googleBtn.classList.toggle('hidden', localStorage.getItem('piano-google') === '1');
-    syncStatus.classList.toggle('hidden', s !== 'synced');
-    if (s === 'synced') googleBtn.classList.add('hidden');
+    if (s === 'ready') { // Google option becomes available in the choosers
+      googleReady = true;
+      if (!gateEl.classList.contains('hidden')) renderGate();
+      if (!overlay.classList.contains('hidden') && overlay.querySelector('.chooser-btns')) showChooser(); // chooser open → add the option
+      return;
+    }
+    cloudChip.textContent =
+      s === 'syncing' ? '☁️ Syncing…' :
+      s === 'synced' ? '☁️ Synced' :
+      '☁️ Offline — tap to reconnect';
+    cloudChip.classList.toggle('clickable', s === 'offline' || s === 'error');
+    if (activeProfile().kind === 'google') cloudChip.classList.remove('hidden');
   },
   onRemoteChange: () => { // remote data merged in → refresh whatever is visible
+    applyToggles(); // settings may have changed remotely
     if (!gateEl.classList.contains('hidden')) renderGate();
     else if (!landingEl.classList.contains('hidden')) renderLanding();
     else if (!menuEl.classList.contains('hidden')) renderMenu();
   },
 });
-googleBtn.addEventListener('click', () => signIn());
+cloudChip.addEventListener('click', () => { // fresh gesture beats popup blockers
+  if (cloudChip.classList.contains('clickable')) activateAuth(activeProfile());
+});
 
 /* ---------- boot ---------- */
 applySettings();
@@ -795,8 +869,11 @@ if (sng) {
   showProfilePage();
 } else if (view === 'menu') {
   showMenu();
+} else if (view === 'chooser') {
+  showGate();
+  showChooser(); // visual check of the add-profile chooser
 } else {
-  showGate(); // normal launch: pick who's playing
+  showGate(); // normal launch: pick who's playing or sign in
 }
 const at = params.get('at');
 if (at) setTimeout(() => game.previewAt(parseFloat(at)), 300);

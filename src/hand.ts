@@ -4,9 +4,13 @@
 const STEP: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
 const LETTER = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'];
 
-export function fingerFor(midi: number): number {
+export function fingerFor(midi: number, hand: 'L' | 'R' = 'R'): number {
   const pc = ((midi % 12) + 12) % 12;
   const oct = Math.floor(midi / 12) - 1;
+  if (hand === 'L') {
+    const steps = STEP[LETTER[pc]] + (oct - 3) * 7; // diatonic steps from C3
+    return Math.max(1, Math.min(5, 5 - steps)); // pinky=C3 … thumb=G3
+  }
   const steps = STEP[LETTER[pc]] + (oct - 4) * 7; // diatonic steps from middle C
   return Math.max(1, Math.min(5, steps + 1));
 }
@@ -29,8 +33,9 @@ const F_GEOM: [number, number, number, number][] = [
 export class Hand {
   private parts: SVGElement[] = []; // index 1..5
   private badge: HTMLElement;
+  private hand: 'L' | 'R' = 'R';
 
-  constructor(container: HTMLElement) {
+  constructor(private container: HTMLElement) {
     container.innerHTML = `
       <svg viewBox="0 0 130 142" aria-hidden="true">
         <g class="fng" data-f="1">
@@ -49,10 +54,16 @@ export class Hand {
     this.badge = container.querySelector('.fbadge')!;
   }
 
+  /** Which hand plays (practice drills use the left) — mirrors the graphic. */
+  setHand(h: 'L' | 'R') {
+    this.hand = h;
+    this.container.classList.toggle('lefty', h === 'L');
+  }
+
   /** Highlight the finger for this midi note; -1 clears. */
   setNote(midi: number) {
-    const f = midi >= 0 ? fingerFor(midi) : -1;
+    const f = midi >= 0 ? fingerFor(midi, this.hand) : -1;
     for (let i = 1; i <= 5; i++) this.parts[i]?.classList.toggle('on', i === f);
-    this.badge.innerHTML = f > 0 ? `Finger ${f} · ${FINGER_NAMES[f]}` : '&nbsp;';
+    this.badge.innerHTML = f > 0 ? `${this.hand === 'L' ? 'Left' : ''} Finger ${f} · ${FINGER_NAMES[f]}` : '&nbsp;';
   }
 }

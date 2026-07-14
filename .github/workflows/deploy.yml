@@ -1,0 +1,34 @@
+name: Deploy to MyPiano (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+        env:
+          # optional: empty → Google sign-in hidden, app runs local-only
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+          external_repository: SriharshaShesham/MyPiano
+          publish_branch: main
+          publish_dir: ./dist
+          cname: mypiano.srichakram.in
+          # dist carries ~35MB of media — keep MyPiano at a single commit
+          force_orphan: true

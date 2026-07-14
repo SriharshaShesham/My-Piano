@@ -3,9 +3,12 @@ import { Game } from './game';
 import { Staff, STAFF_H, PX_PER_SEC } from './staff';
 import { Keys } from './domkeyboard';
 import { Synth } from './audio';
-import { SONGS, savePoints, getPoints, getProfiles, activeProfile, setActiveProfile, addProfile, loadSettings, saveSettings } from './curriculum';
+import { SONGS, DRILLS, savePoints, getPoints, getProfiles, activeProfile, setActiveProfile, addProfile, updateProfile, loadSettings, saveSettings, getDailyDone, markDrillDone } from './curriculum';
+import { initSync, signIn } from './sync';
 import { Hand, fingerFor, FINGER_NAMES, noteLabel } from './hand';
-import { Tutor, speak, type TutorScript } from './tutor';
+import { Tutor, type TutorScript } from './tutor';
+import { Coach } from './coach';
+import { playVoice, stopVoice, noteVoice, type VoiceLine } from './voice';
 import { ScreenSource, MidiSource } from './sources';
 import { MicSource } from './mic';
 import { selfTestScorer } from './scorer';
@@ -28,9 +31,20 @@ const playviewEl = document.getElementById('playview')!;
 const coursesEl = document.getElementById('courses')!;
 const lessonNav = document.getElementById('lessons')!;
 const srcBtns = [...document.querySelectorAll<HTMLButtonElement>('.src')];
+const gateEl = document.getElementById('profileGate')!;
+const landingEl = document.getElementById('landing')!;
+const profilePageEl = document.getElementById('profilePage')!;
+const gateProfilesEl = document.getElementById('gateProfiles')!;
+const drillsEl = document.getElementById('drills')!;
+
+const VIEWS = [gateEl, landingEl, profilePageEl, menuEl, playviewEl];
+function show(view: HTMLElement) {
+  VIEWS.forEach((v) => v.classList.toggle('hidden', v !== view));
+}
 
 let songIdx = 0;
 let sectionIdx = 0;
+let practiceDrill: string | null = null; // playview is a daily drill, not a lesson
 
 /* Each section is practiced 3 rounds; the final modal auto-advances in 10s.
    Scoring: 20 points per section = 14 playing (timing quality minus a wrong-
@@ -59,26 +73,56 @@ async function restart() {
 }
 
 function showFinish(_h: number, t: number) {
+  if (practiceDrill) { // daily drill: no rounds/quiz/points — mark it and done
+    markDrillDone(practiceDrill);
+    overlay.innerHTML = `
+      <div class="card">
+        <div class="big">✅</div>
+        <h2>Practice done!</h2>
+        <p>Great fingers! That's one for today.</p>
+        <div class="card-btns">
+          <button id="again">🔁 AGAIN</button>
+          <button id="toHome">🏠 DONE</button>
+        </div>
+      </div>`;
+    overlay.classList.remove('hidden');
+    document.getElementById('again')!.addEventListener('click', restart);
+    document.getElementById('toHome')!.addEventListener('click', showLanding);
+    return;
+  }
+
   const { sum, wrong } = game.roundQuality;
   const playPts = Math.min(PLAY_PTS, Math.round((PLAY_PTS * Math.max(0, sum - 0.25 * wrong)) / Math.max(t, 1)));
   bestPlay = Math.max(bestPlay, playPts);
   savePoints(SONGS[songIdx].id, sectionIdx, playPts); // partial credit if the kid quits here
   round++;
 
+  const gen = openGen;
   if (round < ROUNDS) {
-    overlay.innerHTML = `
-      <div class="card">
-        <div class="big">${playPts} / ${PLAY_PTS}</div>
-        <h2>Round ${round} done!</h2>
-        <p>${playPts < PLAY_PTS ? 'Quick fingers and right keys score more — ' : 'Perfect! '}round ${round + 1} of ${ROUNDS}!</p>
-      </div>`;
-    overlay.classList.remove('hidden');
-    autoT = window.setTimeout(restart, 2500);
+    // coach reacts to the round first, then the points toast + auto-restart
+    const clip = playPts >= PLAY_PTS ? 'PerfectScore' : playPts >= 9 ? 'GoodJob' : 'TryAgain';
+    coach.play(clip).then(() => {
+      if (gen !== openGen) return; // navigated away mid-clip
+      overlay.innerHTML = `
+        <div class="card">
+          <div class="big">${playPts} / ${PLAY_PTS}</div>
+          <h2>Round ${round} done!</h2>
+          <p>${playPts < PLAY_PTS ? 'Quick fingers and right keys score more — ' : 'Perfect! '}round ${round + 1} of ${ROUNDS}!</p>
+        </div>`;
+      overlay.classList.remove('hidden');
+      autoT = window.setTimeout(restart, 2500);
+    });
     return;
   }
 
-  // all rounds played → pop quiz first, stars after (skipped if kid navigates away)
-  runQuiz().then((quizPts) => { if (quizPts !== null) showStars(bestPlay + quizPts); });
+  // all rounds played → pop quiz, celebrate, then the stars modal
+  (async () => {
+    const quizPts = await runQuiz();
+    if (quizPts === null || gen !== openGen) return;
+    await coach.play('SectionComplete');
+    if (gen !== openGen) return;
+    showStars(bestPlay + quizPts);
+  })();
 }
 
 function showStars(total: number) {
@@ -108,6 +152,9 @@ function showStars(total: number) {
     }, 1000);
   }
 }
+
+const coach = new Coach(document.getElementById('coach')!);
+let openGen = 0; // bumped on every navigation; stale async flows check it and bail
 
 const game = new Game(staff, keys, ctx, synth, showScore, showFinish);
 game.onStateChange = (playing) => {
@@ -166,6 +213,7 @@ function waitForKey(target: number): Promise<void> {
   });
 }
 
+let demoGen = 0; // cancels the multi-step demo flow when the tutor is skipped
 const tutor = new Tutor(document.getElementById('tutor')!, {
   demoNote: (midi) => {
     game.play(midi); // real key press: flash + sound (fires before the wait arms)
@@ -174,9 +222,17 @@ const tutor = new Tutor(document.getElementById('tutor')!, {
     showKeyIntro(midi); // centered "here's where it lives" card
     return waitForKey(midi); // tutor proceeds once the kid presses it
   },
-  demoSection: () => { hideKeyIntro(); return game.demo(); },
+  demoSection: async () => {
+    const g = ++demoGen;
+    hideKeyIntro();
+    await coach.play('WatchMeIntro');
+    if (g !== demoGen) return;
+    await game.demo();
+    if (g !== demoGen) return;
+    await coach.play('YourTurn');
+  },
   onStart: async () => { hideKeyIntro(); await ctx.resume(); game.setPosition(0); game.resume(); },
-  onCancel: () => { hideKeyIntro(); introCancel?.(); game.stopDemo(); },
+  onCancel: () => { demoGen++; hideKeyIntro(); introCancel?.(); coach.stop(); game.stopDemo(); },
 });
 
 /* ---------- pop quiz: mystery notes after the last round ----------
@@ -195,6 +251,7 @@ function cancelQuiz() {
   quizGen++;
   quizOn = false;
   quizAnswer = null;
+  stopVoice();
   quizEl.classList.add('hidden');
   applyNoteLabels(); // back to whatever the ABC toggle says
 }
@@ -216,9 +273,10 @@ async function runQuiz(): Promise<number | null> {
   hand.setNote(-1);
   staff.svg.classList.add('noletters'); // no giving away the answers
   staff.setSong({ ...sec, notes: seq.map((m, i) => ({ midi: m, start: i * STEP, duration: 0.45 })) });
+  await coach.play('QuizTime'); // "can you find the mystery notes?"
+  if (dead()) return null;
   quizEl.classList.remove('hidden');
   quizEl.textContent = `🕵️ Quiz! Play all ${len} mystery notes in order!`;
-  speak(`Quiz time! Can you name and play all ${len} mystery notes, one by one?`);
 
   let firstTry = 0;
   for (let i = 0; i < seq.length; i++) {
@@ -231,28 +289,30 @@ async function runQuiz(): Promise<number | null> {
         if (midi % 12 === target % 12) { res(true); return; }
         wrong++;
         quizEl.textContent = `${pick(MISS)} (note ${i + 1} of ${len})`;
+        if (wrong === 1) coach.play('TryAgain'); // wrong key → coach cheers them on
         if (wrong === 2) { // stuck → reveal: letters back + glowing key
           staff.svg.classList.remove('noletters');
           keys.setGuide(target);
-          speak('Here is a hint — the key is glowing!');
+          coach.play('QuizHint'); // "look for the glowing key!"
         }
       };
     });
     quizAnswer = null;
     if (dead() || !found) return null;
 
+    coach.stop(); // right answer cuts any TryAgain/hint clip short
     if (wrong === 0) firstTry++;
     staff.markHit(i); // note turns green
     if (wrong >= 2) { staff.svg.classList.add('noletters'); keys.setGuide(-1); } // hint off again
     quizEl.textContent = `${pick(PRAISE)} (${i + 1}/${len})`;
-    await new Promise((r) => setTimeout(r, 350));
+    await playVoice(pick(['found_1', 'found_2', 'found_3'] as VoiceLine[]));
     if (dead()) return null;
   }
 
   const pts = Math.round(QUIZ_PTS * (firstTry / len));
   quizEl.textContent = `🏆 Quiz done — ${firstTry}/${len} on the first try! +${pts} points!`;
-  speak(`You solved the whole quiz! ${firstTry} on the first try!`);
-  await new Promise((r) => setTimeout(r, 2000));
+  await playVoice(firstTry === len ? 'quiz_done_perfect' : 'quiz_done');
+  await new Promise((r) => setTimeout(r, 800));
   if (dead()) return null;
 
   cancelQuiz();
@@ -271,40 +331,45 @@ function buildIntro(si: number, sec: number): TutorScript {
     a.length <= 1 ? a[0] ?? '' : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
   const freshNames = list(fresh.map(noteLabel));
 
+  // fixed lines so every one has a pre-generated character voice file
   let intro: string;
+  let introAudio: VoiceLine;
   if (fresh.length === 0) {
     intro = `Wow, you already know every note in this! Let's put the whole song together!`;
+    introAudio = 'know_all';
   } else if (si === 0 && sec === 0) {
     intro = `Welcome to your very first lesson! Let's learn the note ${freshNames}!`;
-  } else if (sec === 0) {
-    intro = `Time for ${s.title}! First, let's meet ${fresh.length === 1 ? 'the note' : 'the notes'} ${freshNames}!`;
+    introAudio = 'first_lesson';
+  } else if (fresh.length === 1) {
+    intro = 'Time to learn a brand new note!';
+    introAudio = 'new_note_one';
   } else {
-    const known = list([...seen].sort((a, b) => a - b).slice(0, 3).map(noteLabel));
-    intro = `Now that you know ${known}, let's learn ${fresh.length === 1 ? 'a brand new note' : `${fresh.length} new notes`}: ${freshNames}!`;
+    intro = 'Time to learn some brand new notes!';
+    introAudio = 'new_note_many';
   }
   const demo = fresh.map((m) => ({
     midi: m,
     say: `${noteLabel(m)}! It's ${keyHint(m)}. Press it with your ${FINGER_NAMES[fingerFor(m)].toLowerCase()}!`,
+    audio: noteVoice(m) ?? undefined, // unmapped midi → Web Speech fallback
   }));
-  return { intro, demo };
+  return { intro, introAudio, demo };
 }
 
-/* ---------- profiles ---------- */
-const profilesEl = document.getElementById('profiles')!;
-
-function renderProfiles() {
-  const active = activeProfile(); // creates the first profile on first run
-  profilesEl.innerHTML = '';
+/* ---------- profile gate (launch screen) ---------- */
+function renderGate() {
+  activeProfile(); // creates the first profile on first run
+  gateProfilesEl.innerHTML = '';
   getProfiles().forEach((p) => {
     const b = document.createElement('button');
-    b.className = 'profile' + (p.id === active.id ? ' active' : '');
+    b.className = 'profile';
     b.innerHTML = `<span class="pavatar">${p.emoji}</span>${p.name}`;
     b.addEventListener('click', () => {
       setActiveProfile(p.id);
+      ctx.resume(); // the gate tap is the gesture that unlocks audio
       applySettings();
-      renderMenu();
+      showLanding();
     });
-    profilesEl.appendChild(b);
+    gateProfilesEl.appendChild(b);
   });
   const add = document.createElement('button');
   add.className = 'profile add';
@@ -314,10 +379,11 @@ function renderProfiles() {
     const name = prompt("What's your name?")?.trim();
     if (!name) return;
     addProfile(name.slice(0, 12));
+    ctx.resume();
     applySettings();
-    renderMenu();
+    showLanding();
   });
-  profilesEl.appendChild(add);
+  gateProfilesEl.appendChild(add);
 }
 
 function applySettings() {
@@ -328,45 +394,65 @@ function applySettings() {
   game.setSpeed(sp);
   chooseSource(s.source ?? 'screen', true);
   applyToggles();
+  document.getElementById('pvAvatar')!.textContent = activeProfile().emoji;
 }
 
-/* ---------- option toggles: skip intro + ABC letters (persisted) ---------- */
-const skipIntroBtn = document.getElementById('skipIntroBtn')!;
-const abcBtn = document.getElementById('abcBtn')!;
-
+/* ---------- persisted option toggles (managed on the profile page) ---------- */
 function applyNoteLabels() {
   staff.svg.classList.toggle('noletters', loadSettings().noteLabels === false);
 }
 function applyToggles() {
   const s = loadSettings();
-  skipIntroBtn.classList.toggle('active', !!s.skipIntro);
-  abcBtn.classList.toggle('active', s.noteLabels !== false);
+  coach.enabled = s.videos !== false; // Interactive videos setting
   if (!quizOn) applyNoteLabels(); // never un-hide mid-quiz
 }
-skipIntroBtn.addEventListener('click', () => {
-  saveSettings({ skipIntro: !loadSettings().skipIntro });
-  applyToggles();
-});
-abcBtn.addEventListener('click', () => {
-  saveSettings({ noteLabels: loadSettings().noteLabels === false });
-  applyToggles();
-});
 
-/* ---------- views ---------- */
-function showMenu() {
+/* ---------- views + navigation ---------- */
+/** Every navigation goes through here: bumps the generation counter so all
+ *  pending async flows (clips, quiz, tutor, auto-advance) bail cleanly. */
+function teardown() {
+  openGen++;
   clearAuto();
   cancelQuiz();
-  overlay.classList.add('hidden'); // finish popup must not survive navigation
+  coach.stop();
+  overlay.classList.add('hidden'); // popups must not survive navigation
   tutor.cancel();
   game.pause();
+}
+
+function showGate() {
+  teardown();
+  renderGate();
+  show(gateEl);
+}
+
+function showLanding() {
+  teardown();
+  renderLanding();
+  show(landingEl);
+}
+
+function showProfilePage() {
+  teardown();
+  renderProfilePage();
+  show(profilePageEl);
+}
+
+function showMenu() {
+  const fromLesson = !playviewEl.classList.contains('hidden') && !practiceDrill;
+  teardown();
   renderMenu();
-  playviewEl.classList.add('hidden');
-  menuEl.classList.remove('hidden');
+  show(menuEl);
+  if (fromLesson) coach.play('Goodbye'); // non-blocking wave over the menu
 }
 
 function openSection(si: number, sec: number, withTutor = true) {
-  clearAuto();
-  cancelQuiz();
+  const fromMenu = !menuEl.classList.contains('hidden');
+  teardown();
+  const gen = openGen;
+  practiceDrill = null;
+  hand.setHand('R');
+  staff.octaveShift = 0;
   round = 0;
   bestPlay = 0;
   songIdx = si;
@@ -375,19 +461,130 @@ function openSection(si: number, sec: number, withTutor = true) {
   game.loadSong(s.sections[sec].song);
   lessonTitle.textContent = `${s.emoji} ${s.title}`;
   renderChips();
-  overlay.classList.add('hidden');
-  menuEl.classList.add('hidden');
-  playviewEl.classList.remove('hidden');
-  tutor.cancel();
-  if (withTutor) {
-    ctx.resume(); // opened via user tap — unlock audio for the demo + TTS
-    if (loadSettings().skipIntro) game.resume(); // straight into the lesson
-    else tutor.run(buildIntro(si, sec));
-  }
+  show(playviewEl);
+  if (!withTutor) return;
+  ctx.resume(); // opened via user tap — unlock audio for the clips + TTS
+  (async () => {
+    if (fromMenu) await coach.play('LessonWelcome'); // lesson launched → welcome
+    if (gen !== openGen) return;
+    if (loadSettings().skipIntro) { game.resume(); return; } // straight in
+    const script = buildIntro(si, sec);
+    if (script.demo.length) await coach.play('NewNoteIntro'); // "a brand new key!"
+    if (gen !== openGen) return;
+    tutor.run(script);
+  })();
 }
 
+function openDrill(id: string) {
+  const d = DRILLS.find((x) => x.id === id);
+  if (!d) return;
+  teardown();
+  practiceDrill = id;
+  hand.setHand(d.hand);
+  staff.octaveShift = d.hand === 'L' ? 1 : 0; // draw C3 drills up an octave
+  game.loadSong(d.song);
+  lessonTitle.textContent = `${d.emoji} ${d.hand === 'L' ? 'Left hand' : 'Right hand'} · ${d.title}`;
+  lessonNav.innerHTML = ''; // no section chips in practice
+  show(playviewEl);
+  ctx.resume();
+  game.resume(); // wait-mode holds on the first note until the kid plays it
+}
+
+/* ---------- landing ---------- */
+const landingAvatar = document.getElementById('landingAvatar')!;
+const overallFill = document.getElementById('overallFill')!;
+const overallPct = document.getElementById('overallPct')!;
+const learnTitle = document.getElementById('learnTitle')!;
+const practiceCount = document.getElementById('practiceCount')!;
+
+/** Next section worth playing: first untouched, else first not-yet-perfect. */
+function continueTarget(): [number, number] | null {
+  for (const pass of [(p: number) => p === 0, (p: number) => p < 20]) {
+    for (let si = 0; si < SONGS.length; si++)
+      for (let sec = 0; sec < SONGS[si].sections.length; sec++)
+        if (pass(getPoints(SONGS[si].id, sec))) return [si, sec];
+  }
+  return null;
+}
+
+function renderLanding() {
+  const p = activeProfile();
+  landingAvatar.innerHTML = `<span class="pavatar">${p.emoji}</span>${p.name}`;
+  const total = SONGS.reduce((n, s) => n + s.sections.length, 0) * 20;
+  const earned = SONGS.reduce((n, s) => n + s.sections.reduce((m, _, i) => m + getPoints(s.id, i), 0), 0);
+  const pct = Math.round((earned / total) * 100);
+  overallFill.style.width = `${pct}%`;
+  overallPct.textContent = `${pct}% · ${earned} / ${total} points`;
+  learnTitle.textContent = earned > 0 ? 'Continue Learning' : 'Start Learning';
+  const done = getDailyDone();
+  practiceCount.textContent = `${done.size} / ${DRILLS.length} done today`;
+  renderDrills();
+}
+
+function renderDrills() {
+  const done = getDailyDone();
+  drillsEl.innerHTML = '';
+  (['R', 'L'] as const).forEach((h) => {
+    const head = document.createElement('h3');
+    head.textContent = h === 'R' ? '✋ Right hand' : '🤚 Left hand';
+    drillsEl.appendChild(head);
+    DRILLS.filter((d) => d.hand === h).forEach((d) => {
+      const b = document.createElement('button');
+      b.className = 'lesson-row';
+      b.innerHTML = `
+        <span class="num">${d.emoji}</span>
+        <span class="name">${d.title}</span>
+        <span class="stars">${done.has(d.id) ? '✅' : '⬜'}</span>`;
+      b.addEventListener('click', () => openDrill(d.id));
+      drillsEl.appendChild(b);
+    });
+  });
+}
+
+/* ---------- profile page ---------- */
+const ppTitle = document.getElementById('ppTitle')!;
+const ppName = document.getElementById('ppName') as HTMLInputElement;
+const ppTutorial = document.getElementById('ppTutorial')!;
+const ppLetters = document.getElementById('ppLetters')!;
+const ppVideos = document.getElementById('ppVideos')!;
+
+function setToggle(el: HTMLElement, on: boolean) {
+  el.classList.toggle('active', on);
+  el.querySelector('.state')!.textContent = on ? 'On' : 'Off';
+}
+
+function renderProfilePage() {
+  const p = activeProfile();
+  ppTitle.textContent = `${p.emoji} ${p.name}`;
+  ppName.value = p.name;
+  const s = loadSettings();
+  setToggle(ppTutorial, !s.skipIntro); // Tutorial mode = intro NOT skipped
+  setToggle(ppLetters, s.noteLabels !== false);
+  setToggle(ppVideos, s.videos !== false);
+}
+
+ppName.addEventListener('change', () => {
+  const name = ppName.value.trim().slice(0, 12);
+  if (name) updateProfile(activeProfile().id, { name });
+  renderProfilePage();
+});
+ppTutorial.addEventListener('click', () => {
+  saveSettings({ skipIntro: !loadSettings().skipIntro });
+  applyToggles();
+  renderProfilePage();
+});
+ppLetters.addEventListener('click', () => {
+  saveSettings({ noteLabels: loadSettings().noteLabels === false });
+  applyToggles();
+  renderProfilePage();
+});
+ppVideos.addEventListener('click', () => {
+  saveSettings({ videos: loadSettings().videos === false });
+  applyToggles();
+  renderProfilePage();
+});
+
 function renderMenu() {
-  renderProfiles();
   coursesEl.innerHTML = '';
   SONGS.forEach((s, si) => {
     const done = s.sections.filter((_, i) => getPoints(s.id, i) > 0).length;
@@ -415,7 +612,22 @@ function renderChips() {
   });
 }
 
-document.getElementById('back')!.addEventListener('click', showMenu);
+/* ---------- navigation buttons ---------- */
+document.getElementById('back')!.addEventListener('click', () => (practiceDrill ? showLanding() : showMenu()));
+document.getElementById('menuBack')!.addEventListener('click', showLanding);
+document.getElementById('pvAvatar')!.addEventListener('click', showGate);
+document.getElementById('ppBack')!.addEventListener('click', showLanding);
+landingAvatar.addEventListener('click', showProfilePage);
+document.getElementById('switchProfile')!.addEventListener('click', showGate);
+document.getElementById('learnCard')!.addEventListener('click', showMenu);
+document.getElementById('continueBtn')!.addEventListener('click', (e) => {
+  e.stopPropagation(); // don't trigger the surrounding Learning card
+  const t = continueTarget();
+  t ? openSection(t[0], t[1]) : showMenu();
+});
+document.getElementById('practiceCard')!.addEventListener('click', () => {
+  drillsEl.classList.toggle('hidden');
+});
 
 /* ---------- input sources ---------- */
 const screen = new ScreenSource();
@@ -437,6 +649,7 @@ async function chooseSource(name: string, quiet = false) {
   const muted = name === 'mic'; // mic mode keeps the app silent
   try {
     await game.setSource(source, muted);
+    coach.muted = muted; // mic mode: coach animates silently
     currentSrc = name;
     saveSettings({ source: name });
     micReadout.classList.toggle('hidden', name !== 'mic');
@@ -481,6 +694,8 @@ async function detectDevices() {
 
 /* ---------- transport + speed ---------- */
 playBtn.addEventListener('click', async () => {
+  openGen++; // abandon any pending welcome/round clip flow
+  coach.stop();
   tutor.cancel(); // impatient kid wins
   clearAuto();
   if (quizOn) { // bailing out of the quiz → restore the real section
@@ -541,22 +756,55 @@ staff.svg.addEventListener('pointerup', () => {
   mode = null;
 });
 
+/* ---------- cloud sync (Google Drive appDataFolder; guest-safe) ---------- */
+const googleBtn = document.getElementById('googleBtn')!;
+const syncStatus = document.getElementById('syncStatus')!;
+initSync({
+  clientId: (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID,
+  onStatus: (s) => {
+    if (s === 'ready') googleBtn.classList.toggle('hidden', localStorage.getItem('piano-google') === '1');
+    syncStatus.classList.toggle('hidden', s !== 'synced');
+    if (s === 'synced') googleBtn.classList.add('hidden');
+  },
+  onRemoteChange: () => { // remote data merged in → refresh whatever is visible
+    if (!gateEl.classList.contains('hidden')) renderGate();
+    else if (!landingEl.classList.contains('hidden')) renderLanding();
+    else if (!menuEl.classList.contains('hidden')) renderMenu();
+  },
+});
+googleBtn.addEventListener('click', () => signIn());
+
 /* ---------- boot ---------- */
-renderMenu();
 applySettings();
 detectDevices();
 
-// Debug hooks for screenshots: ?song=si,sec opens a section; ?at=SECONDS scrubs.
+// Debug hooks for screenshots: ?song=si,sec opens a section; ?at=SECONDS scrubs;
+// ?view=landing|profile|menu opens a view; ?drill=id opens a practice drill.
 const params = new URLSearchParams(location.search);
 const sng = params.get('song');
+const view = params.get('view');
+const drl = params.get('drill');
 if (sng) {
   const [si, sec] = sng.split(',').map(Number);
   openSection(si || 0, sec || 0, false); // no tutor without a user gesture
+} else if (drl) {
+  openDrill(drl);
+} else if (view === 'landing') {
+  showLanding();
+} else if (view === 'profile') {
+  showProfilePage();
+} else if (view === 'menu') {
+  showMenu();
+} else {
+  showGate(); // normal launch: pick who's playing
 }
 const at = params.get('at');
 if (at) setTimeout(() => game.previewAt(parseFloat(at)), 300);
 const lp = params.get('loop');
 if (lp) setTimeout(() => { const [a, b] = lp.split(',').map(Number); game.setLoop(a, b); }, 300);
+// ?coach=ClipName plays one coach clip (visual check only).
+const ck = params.get('coach');
+if (ck) coach.play(ck as any);
 // ?quiz starts the pop quiz on the opened section (visual check only).
 if (params.has('quiz') && sng) setTimeout(() => runQuiz(), 400);
 // ?ki=MIDI freezes the key-intro card (visual check only).

@@ -65,6 +65,10 @@ function noteGlyph(n: SongNote, beat: number): SVGGElement {
 }
 
 export class Staff {
+  // ponytail: display-only octave shift — left-hand drills (C3..C4) would clip
+  // below the treble staff, so they draw an octave up; letters and the real
+  // keyboard guide stay honest. Bass clef is the upgrade path if ever needed.
+  octaveShift = 0;
   readonly svg: SVGSVGElement;
   private lines: SVGElement[] = [];
   private clefLines: SVGElement[] = [];
@@ -139,7 +143,7 @@ export class Staff {
     this.setLoop(-1, -1);
     const beat = 60 / song.bpm;
     this.noteEls = song.notes.map((n) => {
-      const g = noteGlyph(n, beat);
+      const g = noteGlyph({ ...n, midi: n.midi + this.octaveShift * 12 }, beat);
       this.scroll.appendChild(g);
       return g;
     });

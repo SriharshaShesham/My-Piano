@@ -10,17 +10,66 @@
   </head>
   <body>
     <div id="app">
-      <div id="menu">
+      <div id="profileGate" class="view">
+        <h1 class="menu-title">🎹 Piano Kids</h1>
+        <p class="menu-sub">Who's playing today?</p>
+        <div id="gateProfiles" aria-label="Choose a player"></div>
+        <div class="gate-foot">
+          <button id="googleBtn" class="gbtn hidden">
+            <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.5l6.2 5.2C41.3 34.9 44 30 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+            Sign in with Google
+          </button>
+          <span id="syncStatus" class="hidden">☁️ Synced</span>
+        </div>
+      </div>
+
+      <div id="landing" class="view hidden">
+        <header class="landing-top">
+          <button id="landingAvatar" class="profile" title="Profile settings"></button>
+          <button id="switchProfile" class="opt">👥 Switch player</button>
+        </header>
+        <h1 class="menu-title">🎹 Piano Kids</h1>
+        <div class="landing-cards">
+          <div class="big-card" id="learnCard" role="button" tabindex="0">
+            <span class="bc-emoji">📚</span>
+            <span class="bc-title" id="learnTitle">Learning</span>
+            <div class="bc-bar"><div id="overallFill"></div></div>
+            <small id="overallPct">0%</small>
+            <button id="continueBtn">▶ Continue</button>
+          </div>
+          <div class="big-card" id="practiceCard" role="button" tabindex="0">
+            <span class="bc-emoji">🖐️</span>
+            <span class="bc-title">Daily practice</span>
+            <small id="practiceCount"></small>
+            <span class="bc-hint">Finger exercises for both hands</span>
+          </div>
+        </div>
+        <div id="drills" class="hidden"></div>
+      </div>
+
+      <div id="profilePage" class="view hidden">
+        <button id="ppBack" class="opt">← Back</button>
+        <h1 class="menu-title" id="ppTitle"></h1>
+        <div class="pp-card">
+          <label class="pp-row">Name <input id="ppName" maxlength="12" /></label>
+          <button class="pp-row ptoggle" id="ppTutorial"><span>🎓 Tutorial mode</span><span class="state"></span></button>
+          <button class="pp-row ptoggle" id="ppLetters"><span>🔤 Show letters on notes</span><span class="state"></span></button>
+          <button class="pp-row ptoggle" id="ppVideos"><span>🎬 Interactive videos</span><span class="state"></span></button>
+        </div>
+      </div>
+
+      <div id="menu" class="view hidden">
+        <button id="menuBack" class="opt menu-back">← Home</button>
         <h1 class="menu-title">🎹 Piano Kids</h1>
         <p class="menu-sub">Pick a song and play along!</p>
-        <div id="profiles" aria-label="Who's playing?"></div>
         <div id="courses"></div>
       </div>
 
-      <div id="playview" class="hidden">
+      <div id="playview" class="view hidden">
       <header>
         <div class="hleft">
-          <button id="back" aria-label="Back to menu">←</button>
+          <button id="back" aria-label="Back">←</button>
+          <button id="pvAvatar" aria-label="Switch player" title="Switch player"></button>
           <h1 id="lessonTitle">Piano Kids</h1>
         </div>
         <div class="hmid">
@@ -30,8 +79,6 @@
             <button class="src" data-src="mic">🎤 Mic</button>
           </div>
           <label id="speed">🐢<input type="range" id="speedRange" min="0.25" max="1.5" step="0.25" value="0.75" /><span id="speedVal">0.75×</span>🐇</label>
-          <button id="skipIntroBtn" class="opt" title="Skip the teaching intro in every lesson">⏭ Skip intro</button>
-          <button id="abcBtn" class="opt" title="Show or hide the letters on the notes">🔤 ABC</button>
         </div>
         <div class="hright">
           <div class="progress"><div id="progressFill"></div><span id="progressText">0/0</span></div>
@@ -63,6 +110,7 @@
       </div><!-- /playview -->
 
       <div id="overlay" class="hidden"></div>
+      <div id="coach" class="hidden" role="dialog" aria-label="Coach"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

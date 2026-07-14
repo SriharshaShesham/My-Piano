@@ -144,6 +144,16 @@ function readJSON<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) ?? '') ?? fallback; } catch { return fallback; }
 }
 
+/* Every write goes through persist() so cloud sync sees one hook and a
+   last-write-wins timestamp — never call localStorage.setItem directly. */
+let onLocalChange: () => void = () => {};
+export function setOnLocalChange(fn: () => void) { onLocalChange = fn; }
+function persist(key: string, raw: string) {
+  localStorage.setItem(key, raw);
+  localStorage.setItem('piano-updated-at', String(Date.now()));
+  onLocalChange();
+}
+
 export function getProfiles(): Profile[] {
   return readJSON<Profile[]>(PROFILES_KEY, []);
 }
@@ -152,36 +162,41 @@ export function activeProfile(): Profile {
   let ps = getProfiles();
   if (!ps.length) {
     ps = [{ id: 'p1', name: 'Player 1', emoji: AVATARS[0] }];
-    localStorage.setItem(PROFILES_KEY, JSON.stringify(ps));
+    persist(PROFILES_KEY, JSON.stringify(ps));
     // adopt any pre-profile progress so nobody loses their stars
     const legacy = localStorage.getItem('piano-progress');
-    if (legacy) localStorage.setItem(progressKey('p1'), legacy);
+    if (legacy) persist(progressKey('p1'), legacy);
   }
   const id = localStorage.getItem(ACTIVE_KEY);
   return ps.find((p) => p.id === id) ?? ps[0];
 }
 
 export function setActiveProfile(id: string) {
-  localStorage.setItem(ACTIVE_KEY, id);
+  persist(ACTIVE_KEY, id);
 }
 
 export function addProfile(name: string): Profile {
   const ps = getProfiles();
   const p: Profile = { id: `p${Date.now()}`, name, emoji: AVATARS[ps.length % AVATARS.length] };
-  localStorage.setItem(PROFILES_KEY, JSON.stringify([...ps, p]));
+  persist(PROFILES_KEY, JSON.stringify([...ps, p]));
   setActiveProfile(p.id);
   return p;
 }
 
+export function updateProfile(id: string, patch: Partial<Omit<Profile, 'id'>>) {
+  const ps = getProfiles().map((p) => (p.id === id ? { ...p, ...patch } : p));
+  persist(PROFILES_KEY, JSON.stringify(ps));
+}
+
 /* ---------- per-profile settings ---------- */
-export type Settings = { speed?: number; source?: string; skipIntro?: boolean; noteLabels?: boolean };
+export type Settings = { speed?: number; source?: string; skipIntro?: boolean; noteLabels?: boolean; videos?: boolean };
 
 export function loadSettings(): Settings {
   return readJSON<Settings>(`piano-settings-${activeProfile().id}`, {});
 }
 export function saveSettings(patch: Settings) {
   const key = `piano-settings-${activeProfile().id}`;
-  localStorage.setItem(key, JSON.stringify({ ...readJSON<Settings>(key, {}), ...patch }));
+  persist(key, JSON.stringify({ ...readJSON<Settings>(key, {}), ...patch }));
 }
 
 /* ---------- progress (points 0-20 per song section, per profile) ---------- */
@@ -195,8 +210,40 @@ export function savePoints(songId: string, sectionIdx: number, pts: number) {
   const p = loadProgress();
   p[songId] ??= {};
   p[songId][sectionIdx] = Math.max(p[songId][sectionIdx] ?? 0, pts);
-  localStorage.setItem(progressKey(activeProfile().id), JSON.stringify(p));
+  persist(progressKey(activeProfile().id), JSON.stringify(p));
 }
 export function getPoints(songId: string, sectionIdx: number): number {
   return loadProgress()[songId]?.[sectionIdx] ?? 0;
+}
+
+/* ---------- daily finger drills (both hands) ---------- */
+export type Drill = { id: string; title: string; emoji: string; hand: 'L' | 'R'; song: Song };
+
+function drillSet(hand: 'L' | 'R', base: number): Drill[] {
+  const h = hand.toLowerCase();
+  // offsets from the hand's home C; last note held 2 beats
+  const n = (...offs: number[]): Pair[] => offs.map((o, i) => [base + o, i === offs.length - 1 ? 2 : 1]);
+  return [
+    { id: `${h}-scale-up`, title: 'Climb the ladder', emoji: '🪜', hand, song: song('Climb the ladder', n(0, 2, 4, 5, 7, 9, 11, 12)) },
+    { id: `${h}-scale-down`, title: 'Slide back down', emoji: '🛝', hand, song: song('Slide back down', n(12, 11, 9, 7, 5, 4, 2, 0)) },
+    { id: `${h}-up-down`, title: 'Over the hill', emoji: '⛰️', hand, song: song('Over the hill', n(0, 2, 4, 5, 7, 5, 4, 2, 0)) },
+    { id: `${h}-skips`, title: 'Frog hops', emoji: '🐸', hand, song: song('Frog hops', n(0, 4, 7, 12, 7, 4, 0)) },
+    { id: `${h}-repeat`, title: 'Echo echo', emoji: '🦜', hand, song: song('Echo echo', n(0, 0, 2, 2, 4, 4, 5, 5, 7, 7)) },
+  ];
+}
+// right hand from middle C (C4), left hand from C3 — one octave below
+export const DRILLS: Drill[] = [...drillSet('R', 60), ...drillSet('L', 48)];
+
+/* ---------- daily practice tracking (per profile, resets each day) ---------- */
+const dailyKey = (pid: string) => `piano-daily-${pid}`;
+const todayStr = () => new Date().toLocaleDateString('sv'); // YYYY-MM-DD, local
+
+export function getDailyDone(): Set<string> {
+  const d = readJSON<{ date: string; done: string[] }>(dailyKey(activeProfile().id), { date: '', done: [] });
+  return new Set(d.date === todayStr() ? d.done : []);
+}
+export function markDrillDone(id: string) {
+  const done = getDailyDone();
+  done.add(id);
+  persist(dailyKey(activeProfile().id), JSON.stringify({ date: todayStr(), done: [...done] }));
 }

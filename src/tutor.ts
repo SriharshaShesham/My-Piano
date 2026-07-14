@@ -1,9 +1,13 @@
-// Lesson tutor: TTS narration (Web Speech API — built in, no deps), demos the
-// new notes, then plays the WHOLE section hands-free, then counts down 4…1
-// and auto-starts the lesson. Tap the bubble to skip.
+// Lesson tutor: narrates with pre-generated character voice lines when
+// available (falls back to Web Speech TTS), demos the new notes, then plays
+// the WHOLE section hands-free, then counts down 4…1 and auto-starts the
+// lesson. Tap the bubble to skip.
+import { playVoice, stopVoice, type VoiceLine } from './voice';
+
 export type TutorScript = {
   intro: string;
-  demo: { midi: number; say: string }[];
+  introAudio?: VoiceLine;
+  demo: { midi: number; say: string; audio?: VoiceLine }[];
 };
 
 type TutorHooks = {
@@ -14,10 +18,6 @@ type TutorHooks = {
   onStart: () => void;                    // countdown finished → start the lesson
   onCancel: () => void;                   // skipped → stop any running demo
 };
-
-const WATCH = ['Now watch and listen!', 'Watch me play it first!', 'Listen closely — like this!'];
-const YOUR_TURN = ["Now it's your turn!", 'Ready? Your turn now!', "Your turn — you've got this!"];
-const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 
 /** Prefer neural/online voices — they're dramatically less robotic. */
 let cachedVoice: SpeechSynthesisVoice | null = null;
@@ -68,6 +68,7 @@ export class Tutor {
   cancel() {
     this.gen++;
     this.active = false;
+    stopVoice();
     window.speechSynthesis?.cancel();
     this.el.classList.add('hidden');
     this.el.classList.remove('count');
@@ -88,8 +89,9 @@ export class Tutor {
     await this.wait(80);
     if (dead()) return;
 
-    const say = async (text: string) => {
+    const say = async (text: string, audio?: VoiceLine) => {
       this.txt.textContent = text;
+      if (audio) { await playVoice(audio); return; } // character voice line
       const sentences = text.match(/[^.!?]+[.!?]*/g)?.map((s) => s.trim()).filter(Boolean) ?? [text];
       for (const s of sentences) {
         if (dead()) return;
@@ -99,7 +101,7 @@ export class Tutor {
       }
     };
 
-    await say(script.intro);
+    await say(script.intro, script.introAudio);
     if (dead()) return;
 
     // teach each new note: real key press + finger callout, then WAIT for
@@ -107,19 +109,14 @@ export class Tutor {
     for (const d of script.demo) {
       if (dead()) return;
       const found = this.hooks.demoNote(d.midi);
-      await say(d.say);
+      await say(d.say, d.audio);
       if (dead()) return;
       await found;
       if (dead()) return;
     }
 
-    // play the whole section hands-free
-    await say(pick(WATCH));
-    if (dead()) return;
+    // play the whole section hands-free (the coach clips voice this beat)
     await this.hooks.demoSection();
-    if (dead()) return;
-
-    await say(pick(YOUR_TURN));
     if (dead()) return;
 
     this.el.classList.add('count');

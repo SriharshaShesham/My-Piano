@@ -80,7 +80,10 @@ export class Staff {
   private lastT = 0;
 
   constructor(container: HTMLElement) {
-    this.svg = el('svg', { class: 'staff', height: STAFF_H }) as SVGSVGElement;
+    // viewBox + preserveAspectRatio="none": width stays 1:1 (viewBox width tracks
+    // clientWidth in resize()), height scales STAFF_H → whatever vertical space
+    // <main> leaves. Lets the staff shrink on short/landscape phones.
+    this.svg = el('svg', { class: 'staff', viewBox: `0 0 100 ${STAFF_H}`, preserveAspectRatio: 'none' }) as SVGSVGElement;
 
     const linesG = el('g', { class: 'lines' });
     for (let i = 0; i < 5; i++) {
@@ -124,6 +127,7 @@ export class Staff {
     const w = this.svg.clientWidth || this.svg.parentElement?.clientWidth || 0;
     if (!w || w === this.w) return;
     this.w = w;
+    this.svg.setAttribute('viewBox', `0 0 ${this.w} ${STAFF_H}`);
     for (const l of this.lines) l.setAttribute('x2', String(this.w));
     this.cursor.setAttribute('x', String(this.cursorX() - 15));
     this.setTime(this.lastT); // re-align the scroll to the moved cursor

@@ -37,8 +37,27 @@
             <small id="practiceCount"></small>
             <span class="bc-hint">Finger exercises for both hands</span>
           </div>
+          <div class="big-card" id="songsCard" role="button" tabindex="0">
+            <span class="bc-emoji">🎬</span>
+            <span class="bc-title">Songs</span>
+            <small id="songsCount"></small>
+            <span class="bc-hint">Rhymes &amp; movie themes</span>
+          </div>
         </div>
-        <div id="drills" class="hidden"></div>
+      </div>
+
+      <div id="songsView" class="view hidden">
+        <button id="songsBack" class="opt menu-back">← Home</button>
+        <h1 class="menu-title">🎬 Songs</h1>
+        <p class="menu-sub">Rhymes and famous themes — just for fun</p>
+        <div id="songsList"></div>
+      </div>
+
+      <div id="practice" class="view hidden">
+        <button id="practiceBack" class="opt menu-back">← Home</button>
+        <h1 class="menu-title">🖐️ Daily practice</h1>
+        <p class="menu-sub">Finger exercises for both hands</p>
+        <div id="drills"></div>
       </div>
 
       <div id="profilePage" class="view hidden">
@@ -102,7 +121,12 @@
         <div id="micReadout" class="hidden">🎤 listening…</div>
       </main>
 
-      <div id="kb" aria-label="Piano keyboard"></div>
+      <div id="kbwrap"><div id="kb" aria-label="Piano keyboard"></div></div>
+
+      <div id="rotateHint">
+        <div class="rh-icon">📱↻</div>
+        <p>Turn your device sideways to play 🎹</p>
+      </div>
       </div><!-- /playview -->
 
       <div id="overlay" class="hidden"></div>

@@ -61,6 +61,8 @@ export class Keys {
       label.className = 'label';
       label.textContent = noteName(midi);
       this.guideEl.appendChild(label);
+      // keep the next key on-screen when the keyboard overflows (narrow viewports)
+      this.guideEl.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
     }
   }
 }

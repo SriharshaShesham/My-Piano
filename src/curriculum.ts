@@ -1,7 +1,7 @@
 import type { Song, SongNote } from './types';
 
 export type Section = { title: string; song: Song };
-export type SongEntry = { id: string; emoji: string; title: string; sections: Section[] };
+export type SongEntry = { id: string; emoji: string; title: string; sections: Section[]; category?: 'songs' };
 
 const BEAT = 0.5; // seconds per quarter note (120 bpm)
 type Pair = [number, number]; // [midi, beats]
@@ -31,6 +31,11 @@ function entry(id: string, emoji: string, title: string, phrases: Pair[][], phra
 
 const C = 60, D = 62, E = 64, F = 65, G = 67, A = 69, AS = 70, C5 = 72, G3 = 55;
 const q = (...ms: number[]): Pair[] => ms.map((m) => [m, 1]);
+
+// wider palette for the Songs library (keyboard spans C3=48 .. B5=83)
+const DS3 = 51, E3 = 52, F3 = 53, FS3 = 54, AS3 = 58, B3 = 59;
+const DS = 63, FS = 66, B = 71;
+const D5 = 74, DS5 = 75, E5 = 76, F5 = 77, G5 = 79;
 
 /* ---------- the songs ---------- */
 
@@ -119,6 +124,40 @@ const happyBirthday = entry('happy-birthday', '🎂', 'Happy Birthday', [
   'Happy birthday dear friend', 'Happy birthday to you!',
 ]);
 
+/* ---------- Songs library: play-for-fun rhymes + famous themes ----------
+   ponytail: copyrighted themes encoded as short single-line melody motifs
+   (functional [midi,beats] transcriptions), same form as the PD tunes above.
+   Single-phrase entries → one "Melody" section, no auto "Whole song". */
+const one = (id: string, emoji: string, title: string, phrase: Pair[]): SongEntry =>
+  ({ ...entry(id, emoji, title, [phrase], ['Melody']), category: 'songs' });
+
+const songLibrary: SongEntry[] = [
+  // --- kids rhymes (public domain) ---
+  one('itsy-spider', '🕷️', 'Itsy Bitsy Spider', [...q(G, C, C, C, D, E, E, E, D, C, D, E), [C, 2]]),
+  one('wheels-bus', '🚌', 'Wheels on the Bus', [...q(C, F, F, F, A, C5, A, F, G, E), [C, 2]]),
+  one('if-happy', '😄', "If You're Happy", [...q(C, F, F, F, F, E, F), [G, 2]]),
+  one('this-old-man', '👴', 'This Old Man', [...q(G, E, G, G, E, G, A, G, F, E), [D, 2]]),
+  one('bingo', '🐕', 'Bingo', [...q(G, G, E, G, G, E, A, A, G, F, E), [D, 2]]),
+  one('rain-away', '☔', 'Rain Rain Go Away', [...q(G, E, G, E, A, G), [E, 2]]),
+  // --- famous themes (short recognisable melody lines) ---
+  one('fur-elise', '🎼', 'Für Elise', [[E5, 0.5], [DS5, 0.5], [E5, 0.5], [DS5, 0.5], [E5, 0.5], [B, 0.5], [D5, 0.5], [C5, 0.5], [A, 1.5], [REST, 0.5], [C, 0.5], [E, 0.5], [A, 0.5], [B, 2]]),
+  one('jurassic', '🦕', 'Jurassic Park', [ // Journey to the Island — opening phrase (E♭), long–short–short lilt
+    [AS, 3], [C5, 0.5], [D5, 0.5], [DS5, 3], [D5, 0.5], [C5, 0.5],
+    [D5, 3], [DS5, 0.5], [F5, 0.5], [G5, 3], [F5, 0.5], [DS5, 0.5],
+    [F5, 3], [DS5, 0.5], [D5, 0.5], [DS5, 3], [D5, 0.5], [C5, 0.5],
+    [D5, 3], [C5, 0.5], [AS, 0.5], [DS5, 4]]),
+  one('bond', '🕴️', 'James Bond', [[E3, 0.5], [FS3, 0.5], [G3, 0.5], [FS3, 0.5], [E3, 0.5], [FS3, 0.5], [G3, 0.5], [FS3, 0.5], [E3, 2]]),
+  one('mission', '🎧', 'Mission: Impossible', [[G3, 0.5], [G3, 0.5], [AS3, 0.5], [C, 0.5], [G3, 0.5], [G3, 0.5], [F3, 0.5], [FS3, 0.5], [G3, 0.5], [G3, 0.5], [AS3, 0.5], [C, 0.5], [D, 2]]),
+  one('star-wars', '🌌', 'Star Wars', [[G, 1], [G, 1], [G, 1], [C5, 2], [G, 2], [F, 1], [E, 1], [D, 1], [C5, 2], [G, 2]]),
+  one('imperial', '🖤', 'Imperial March', [[G3, 1], [G3, 1], [G3, 1], [DS3, 1.5], [AS3, 0.5], [G3, 2], [DS3, 1.5], [AS3, 0.5], [G3, 2]]),
+  one('hedwig', '🦉', "Hedwig's Theme", [[B3, 1], [E, 1], [G, 1], [FS, 1], [E, 2], [B, 2], [A, 3], [FS, 2]]),
+  one('pink-panther', '🐾', 'Pink Panther', [...q(E, FS, G, AS, A, G, E, FS), [G, 2]]),
+  one('mario', '🍄', 'Super Mario', [[E, 0.5], [E, 0.5], [REST, 0.5], [E, 0.5], [REST, 0.5], [C, 0.5], [E, 0.5], [REST, 0.5], [G, 1], [REST, 1], [G3, 2]]),
+  one('pirates', '🏴‍☠️', "He's a Pirate", [[D, 1], [F, 1], [G, 1], [G, 2], [G, 1], [A, 1], [AS, 1], [AS, 2], [AS, 1], [C5, 1], [D5, 1], [C5, 1], [AS, 1], [A, 1], [G, 1], [A, 2]]),
+  one('got', '🐉', 'Game of Thrones', [...q(G3, C, DS, F, G3, C, DS, F, G3, C, E), [F, 2]]),
+  one('tetris', '🧱', 'Tetris', [[E, 1], [B, 0.5], [C5, 0.5], [D5, 1], [C5, 0.5], [B, 0.5], [A, 1], [A, 0.5], [C5, 0.5], [E5, 1], [D5, 0.5], [C5, 0.5], [B, 1.5], [C5, 0.5], [D5, 1], [E, 1], [C5, 1], [A, 1], [A, 2]]),
+];
+
 export const SONGS: SongEntry[] = [
   warmUps,
   hotCrossBuns,
@@ -132,6 +171,7 @@ export const SONGS: SongEntry[] = [
   saints,
   jingleBells,
   happyBirthday,
+  ...songLibrary,
 ];
 
 /* ---------- profiles: identities — Google-backed or local ---------- */
@@ -252,23 +292,34 @@ export function getPoints(songId: string, sectionIdx: number): number {
   return loadProgress()[songId]?.[sectionIdx] ?? 0;
 }
 
-/* ---------- daily finger drills (both hands) ---------- */
-export type Drill = { id: string; title: string; emoji: string; hand: 'L' | 'R'; song: Song };
+/* ---------- daily finger drills: a typing-tutor ladder ---------- */
+export type Drill = { id: string; title: string; emoji: string; hand: 'L' | 'R'; level: number; song: Song };
 
-function drillSet(hand: 'L' | 'R', base: number): Drill[] {
-  const h = hand.toLowerCase();
-  // offsets from the hand's home C; last note held 2 beats
-  const n = (...offs: number[]): Pair[] => offs.map((o, i) => [base + o, i === offs.length - 1 ? 2 : 1]);
-  return [
-    { id: `${h}-scale-up`, title: 'Climb the ladder', emoji: '🪜', hand, song: song('Climb the ladder', n(0, 2, 4, 5, 7, 9, 11, 12)) },
-    { id: `${h}-scale-down`, title: 'Slide back down', emoji: '🛝', hand, song: song('Slide back down', n(12, 11, 9, 7, 5, 4, 2, 0)) },
-    { id: `${h}-up-down`, title: 'Over the hill', emoji: '⛰️', hand, song: song('Over the hill', n(0, 2, 4, 5, 7, 5, 4, 2, 0)) },
-    { id: `${h}-skips`, title: 'Frog hops', emoji: '🐸', hand, song: song('Frog hops', n(0, 4, 7, 12, 7, 4, 0)) },
-    { id: `${h}-repeat`, title: 'Echo echo', emoji: '🦜', hand, song: song('Echo echo', n(0, 0, 2, 2, 4, 4, 5, 5, 7, 7)) },
-  ];
+// ordered easy → hard; offsets are semitones from the hand's home C (0..24 keeps
+// both hands inside the C3..B5 keyboard). Each is played for both hands.
+const LEVELS: { name: string; emoji: string; offs: number[] }[] = [
+  { name: 'Two keys', emoji: '👣', offs: [0, 2, 0, 2, 0] },
+  { name: 'Three keys', emoji: '🐾', offs: [0, 2, 4, 2, 0] },
+  { name: 'Finger taps', emoji: '👆', offs: [0, 2, 4, 2, 0, 4, 2, 0] },
+  { name: 'Five-finger up', emoji: '🖐️', offs: [0, 2, 4, 5, 7] },
+  { name: 'Up and down', emoji: '⛰️', offs: [0, 2, 4, 5, 7, 5, 4, 2, 0] },
+  { name: 'Frog hops', emoji: '🐸', offs: [0, 4, 2, 5, 4, 7, 5, 2, 0] },
+  { name: 'Climb the scale', emoji: '🪜', offs: [0, 2, 4, 5, 7, 9, 11, 12] },
+  { name: 'Slide back down', emoji: '🛝', offs: [12, 11, 9, 7, 5, 4, 2, 0] },
+  { name: 'Arpeggio', emoji: '🌈', offs: [0, 4, 7, 12, 7, 4, 0] },
+  { name: 'Broken chords', emoji: '🧩', offs: [0, 0, 2, 2, 4, 4, 5, 5, 7, 7] },
+  { name: 'Big reach', emoji: '🦘', offs: [0, 7, 4, 9, 7, 12] },
+  { name: 'Long run', emoji: '🏃', offs: [0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0] },
+];
+
+// right hand from middle C (C4=60), left hand from C3 (48) — one octave below
+function drill(lvIdx: number, hand: 'L' | 'R'): Drill {
+  const { name, emoji, offs } = LEVELS[lvIdx];
+  const base = hand === 'R' ? 60 : 48;
+  const pairs: Pair[] = offs.map((o, i) => [base + o, i === offs.length - 1 ? 2 : 1]); // last note held
+  return { id: `${hand.toLowerCase()}-lvl${lvIdx + 1}`, title: name, emoji, hand, level: lvIdx + 1, song: song(name, pairs) };
 }
-// right hand from middle C (C4), left hand from C3 — one octave below
-export const DRILLS: Drill[] = [...drillSet('R', 60), ...drillSet('L', 48)];
+export const DRILLS: Drill[] = LEVELS.flatMap((_, i) => [drill(i, 'R'), drill(i, 'L')]);
 
 /* ---------- daily practice tracking (per profile, resets each day) ---------- */
 const dailyKey = (pid: string) => `piano-daily-${pid}`;

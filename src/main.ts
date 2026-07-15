@@ -36,8 +36,11 @@ const landingEl = document.getElementById('landing')!;
 const profilePageEl = document.getElementById('profilePage')!;
 const gateProfilesEl = document.getElementById('gateProfiles')!;
 const drillsEl = document.getElementById('drills')!;
+const practiceEl = document.getElementById('practice')!;
+const songsViewEl = document.getElementById('songsView')!;
+const songsListEl = document.getElementById('songsList')!;
 
-const VIEWS = [gateEl, landingEl, profilePageEl, menuEl, playviewEl];
+const VIEWS = [gateEl, landingEl, profilePageEl, menuEl, practiceEl, songsViewEl, playviewEl];
 function show(view: HTMLElement) {
   VIEWS.forEach((v) => v.classList.toggle('hidden', v !== view));
 }
@@ -489,6 +492,18 @@ function showProfilePage() {
   show(profilePageEl);
 }
 
+function showPractice() {
+  teardown();
+  renderDrills();
+  show(practiceEl);
+}
+
+function showSongs() {
+  teardown();
+  renderSongs();
+  show(songsViewEl);
+}
+
 function showMenu() {
   const fromLesson = !playviewEl.classList.contains('hidden') && !practiceDrill;
   teardown();
@@ -516,6 +531,17 @@ function openSection(si: number, sec: number, withTutor = true) {
   if (!withTutor) return;
   ctx.resume(); // opened via user tap — unlock audio for the clips + TTS
   (async () => {
+    if (s.category === 'songs') {
+      // Songs library: play the tune through once so they hear it, then hand over
+      await coach.play('WatchMeIntro');
+      if (gen !== openGen) return;
+      await game.demo();
+      if (gen !== openGen) return;
+      await coach.play('YourTurn');
+      if (gen !== openGen) return;
+      game.resume(); // wait-mode from the top
+      return;
+    }
     if (fromMenu) await coach.play('LessonWelcome'); // lesson launched → welcome
     if (gen !== openGen) return;
     if (loadSettings().skipIntro) { game.resume(); return; } // straight in
@@ -548,12 +574,15 @@ const overallPct = document.getElementById('overallPct')!;
 const learnTitle = document.getElementById('learnTitle')!;
 const practiceCount = document.getElementById('practiceCount')!;
 
-/** Next section worth playing: first untouched, else first not-yet-perfect. */
+/** Next section worth playing: first untouched, else first not-yet-perfect.
+ *  Learning track only — the Songs library is play-for-fun, not the curriculum. */
 function continueTarget(): [number, number] | null {
   for (const pass of [(p: number) => p === 0, (p: number) => p < 20]) {
-    for (let si = 0; si < SONGS.length; si++)
+    for (let si = 0; si < SONGS.length; si++) {
+      if (SONGS[si].category === 'songs') continue;
       for (let sec = 0; sec < SONGS[si].sections.length; sec++)
         if (pass(getPoints(SONGS[si].id, sec))) return [si, sec];
+    }
   }
   return null;
 }
@@ -562,34 +591,55 @@ function renderLanding() {
   const p = activeProfile();
   landingAvatar.innerHTML = `${avatarHTML(p)}${p.name}`;
   cloudChip.classList.toggle('hidden', p.kind !== 'google');
-  const total = SONGS.reduce((n, s) => n + s.sections.length, 0) * 20;
-  const earned = SONGS.reduce((n, s) => n + s.sections.reduce((m, _, i) => m + getPoints(s.id, i), 0), 0);
+  const learn = SONGS.filter((s) => s.category !== 'songs'); // progress bar tracks the curriculum only
+  const total = learn.reduce((n, s) => n + s.sections.length, 0) * 20;
+  const earned = learn.reduce((n, s) => n + s.sections.reduce((m, _, i) => m + getPoints(s.id, i), 0), 0);
   const pct = Math.round((earned / total) * 100);
   overallFill.style.width = `${pct}%`;
   overallPct.textContent = `${pct}% · ${earned} / ${total} points`;
   learnTitle.textContent = earned > 0 ? 'Continue Learning' : 'Start Learning';
+  document.getElementById('continueBtn')!.textContent = earned > 0 ? '▶ Continue' : '▶ Start';
   const done = getDailyDone();
   practiceCount.textContent = `${done.size} / ${DRILLS.length} done today`;
-  renderDrills();
+  const songCount = SONGS.filter((s) => s.category === 'songs').length;
+  document.getElementById('songsCount')!.textContent = `${songCount} to play`;
 }
 
 function renderDrills() {
   const done = getDailyDone();
   drillsEl.innerHTML = '';
-  (['R', 'L'] as const).forEach((h) => {
+  const levels = [...new Set(DRILLS.map((d) => d.level))].sort((a, b) => a - b);
+  levels.forEach((lv) => {
+    const rows = DRILLS.filter((d) => d.level === lv);
     const head = document.createElement('h3');
-    head.textContent = h === 'R' ? '✋ Right hand' : '🤚 Left hand';
+    head.textContent = `${rows[0].emoji} Level ${lv} · ${rows[0].title}`;
     drillsEl.appendChild(head);
-    DRILLS.filter((d) => d.hand === h).forEach((d) => {
+    rows.forEach((d) => {
       const b = document.createElement('button');
       b.className = 'lesson-row';
       b.innerHTML = `
-        <span class="num">${d.emoji}</span>
-        <span class="name">${d.title}</span>
+        <span class="num">${d.hand === 'R' ? '✋' : '🤚'}</span>
+        <span class="name">${d.hand === 'R' ? 'Right hand' : 'Left hand'}</span>
         <span class="stars">${done.has(d.id) ? '✅' : '⬜'}</span>`;
       b.addEventListener('click', () => openDrill(d.id));
       drillsEl.appendChild(b);
     });
+  });
+}
+
+function renderSongs() {
+  songsListEl.innerHTML = '';
+  SONGS.forEach((s, si) => {
+    if (s.category !== 'songs') return; // keep the true SONGS index for openSection
+    const whole = starsOf(getPoints(s.id, s.sections.length - 1));
+    const b = document.createElement('button');
+    b.className = 'lesson-row';
+    b.innerHTML = `
+      <span class="num">${s.emoji}</span>
+      <span class="name">${s.title}</span>
+      <span class="stars">${starStr(whole)}</span>`;
+    b.addEventListener('click', () => openSection(si, 0));
+    songsListEl.appendChild(b);
   });
 }
 
@@ -650,6 +700,7 @@ ppVideos.addEventListener('click', () => {
 function renderMenu() {
   coursesEl.innerHTML = '';
   SONGS.forEach((s, si) => {
+    if (s.category === 'songs') return; // Songs library has its own page
     const done = s.sections.filter((_, i) => getPoints(s.id, i) > 0).length;
     const whole = starsOf(getPoints(s.id, s.sections.length - 1));
     const b = document.createElement('button');
@@ -676,7 +727,8 @@ function renderChips() {
 }
 
 /* ---------- navigation buttons ---------- */
-document.getElementById('back')!.addEventListener('click', () => (practiceDrill ? showLanding() : showMenu()));
+document.getElementById('back')!.addEventListener('click', () =>
+  practiceDrill ? showPractice() : SONGS[songIdx]?.category === 'songs' ? showSongs() : showMenu());
 document.getElementById('menuBack')!.addEventListener('click', showLanding);
 document.getElementById('pvAvatar')!.addEventListener('click', showGate);
 document.getElementById('ppBack')!.addEventListener('click', showLanding);
@@ -688,9 +740,10 @@ document.getElementById('continueBtn')!.addEventListener('click', (e) => {
   const t = continueTarget();
   t ? openSection(t[0], t[1]) : showMenu();
 });
-document.getElementById('practiceCard')!.addEventListener('click', () => {
-  drillsEl.classList.toggle('hidden');
-});
+document.getElementById('practiceCard')!.addEventListener('click', showPractice);
+document.getElementById('practiceBack')!.addEventListener('click', showLanding);
+document.getElementById('songsCard')!.addEventListener('click', showSongs);
+document.getElementById('songsBack')!.addEventListener('click', showLanding);
 
 /* ---------- input sources ---------- */
 const screen = new ScreenSource();

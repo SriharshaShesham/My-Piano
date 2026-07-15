@@ -118,15 +118,21 @@ main {
 #gotIt:hover { transform: translateY(-2px); filter: brightness(1.06); }
 
 /* ---------- Keyboard ---------- */
+#kbwrap {
+  flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
 #kb {
   position: relative;
   height: clamp(120px, 24vh, 210px);
   background: #111;
   display: flex;
-  flex-shrink: 0;
+  min-width: max-content; /* overflows & scrolls when narrow; black-key % left stays correct */
 }
 .wkey {
-  flex: 1;
+  flex: 1 0 44px;
   background: #fff;
   border-left: 1px solid #c9ccd3;
   border-bottom: 6px solid #b9bdc6;
@@ -162,3 +168,27 @@ main {
   z-index: 2;
 }
 .bkey:active, .bkey.pressed { background: linear-gradient(#2a2e36, #000); }
+
+/* ---------- Responsive ---------- */
+/* chrome shrink on any small screen (portrait phone or short landscape) */
+@media (max-width: 768px), (max-height: 480px) {
+  header { padding: 10px 16px; }
+  header h1 { font-size: 18px; }
+  #pause { width: 44px; height: 44px; }
+  .progress { min-width: 140px; height: 32px; font-size: 14px; }
+  #modal { width: min(46vw, 420px); padding: 24px 24px 20px; gap: 18px; }
+  #modal p { font-size: 16px; }
+  #kb { height: clamp(96px, 26vh, 150px); }
+}
+/* portrait phone: the side-rail modal has no room — drop it below the staff */
+@media (max-width: 768px) and (orientation: portrait) {
+  main { flex-direction: column; }
+  .sheet { width: 96%; }
+  #modal {
+    position: static;
+    transform: none;
+    width: min(96vw, 460px);
+    border-radius: 22px;
+    margin: 10px auto;
+  }
+}

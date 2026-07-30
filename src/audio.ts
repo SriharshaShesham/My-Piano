@@ -1,12 +1,25 @@
-// Tiny oscillator "piano". ponytail: a triangle wave with a fast decay is
-// plenty to prove the loop — swap in a real soundfont (smplr) when we want
-// nicer sound. Stays silent in mic mode (the real instrument makes the sound).
+import { SplendidGrandPiano } from 'smplr';
+
+// Piano sound: smplr's sampled grand once its samples arrive over the
+// network; the old triangle-wave oscillator covers the gap (first seconds
+// of a session, or fully offline). Stays silent in mic mode — the Game
+// gates play() calls, not this class.
 export class Synth {
+  private piano: SplendidGrandPiano | null = null;
   private live = new Set<{ osc: OscillatorNode; gain: GainNode }>();
 
-  constructor(private ctx: AudioContext) {}
+  constructor(private ctx: AudioContext) {
+    try {
+      const p = SplendidGrandPiano(ctx);
+      p.ready.then(() => (this.piano = p)).catch(() => {}); // offline → oscillator
+    } catch { /* no fetch/AudioWorklet support → oscillator */ }
+  }
 
   play(midi: number, velocity = 100) {
+    if (this.piano) {
+      this.piano.start({ note: midi, velocity });
+      return;
+    }
     const t = this.ctx.currentTime;
     const freq = 440 * Math.pow(2, (midi - 69) / 12);
     const osc = this.ctx.createOscillator();
@@ -27,6 +40,7 @@ export class Synth {
 
   /** Silence ringing tails instantly (section switch / demo skip). */
   cut() {
+    this.piano?.stop();
     const t = this.ctx.currentTime;
     for (const { osc, gain } of this.live) {
       gain.gain.cancelScheduledValues(t);

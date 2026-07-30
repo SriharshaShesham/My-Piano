@@ -139,8 +139,15 @@ const happyBirthday = entry('happy-birthday', '🎂', 'Happy Birthday', [
    ponytail: copyrighted themes encoded as short single-line melody motifs
    (functional [midi,beats] transcriptions), same form as the PD tunes above.
    Single-phrase entries → one "Melody" section, no auto "Whole song". */
-const one = (id: string, emoji: string, title: string, phrase: Pair[]): SongEntry =>
-  ({ ...entry(id, emoji, title, [phrase], ['Melody']), category: 'songs' });
+const one = (id: string, emoji: string, title: string, phrase: Pair[], backing?: Pair[]): SongEntry => {
+  const e: SongEntry = { ...entry(id, emoji, title, [phrase], ['Melody']), category: 'songs' };
+  if (backing) {
+    const b = song(title, backing).notes.map((n) => ({ ...n, backing: true }));
+    const s = e.sections[0].song;
+    e.sections[0] = { ...e.sections[0], song: { ...s, notes: [...s.notes, ...b].sort((x, y) => x.start - y.start) } };
+  }
+  return e;
+};
 
 /** Two-hand lesson: phrase-sized sections (each staged R→L→Both by main.ts),
  *  plus an auto-added "whole song" finale. Per phrase, both voices must span
@@ -160,13 +167,19 @@ function twoHandEntry(id: string, emoji: string, title: string, phrases: HandPhr
 }
 
 const songLibrary: SongEntry[] = [
-  // --- kids rhymes (public domain) ---
-  one('itsy-spider', '🕷️', 'Itsy Bitsy Spider', [...q(G, C, C, C, D, E, E, E, D, C, D, E), [C, 2]]),
-  one('wheels-bus', '🚌', 'Wheels on the Bus', [...q(C, F, F, F, A, C5, A, F, G, E), [C, 2]]),
-  one('if-happy', '😄', "If You're Happy", [...q(C, F, F, F, F, E, F), [G, 2]]),
-  one('this-old-man', '👴', 'This Old Man', [...q(G, E, G, G, E, G, A, G, F, E), [D, 2]]),
-  one('bingo', '🐕', 'Bingo', [...q(G, G, E, G, G, E, A, A, G, F, E), [D, 2]]),
-  one('rain-away', '☔', 'Rain Rain Go Away', [...q(G, E, G, E, A, G), [E, 2]]),
+  // --- kids rhymes (public domain), with soft I-IV-V bass backing ---
+  one('itsy-spider', '🕷️', 'Itsy Bitsy Spider', [...q(G, C, C, C, D, E, E, E, D, C, D, E), [C, 2]],
+    [[REST, 1], [C3, 4], [C3, 4], [G3, 3], [C3, 2]]),
+  one('wheels-bus', '🚌', 'Wheels on the Bus', [...q(C, F, F, F, A, C5, A, F, G, E), [C, 2]],
+    [[REST, 1], [F3, 4], [F3, 3], [C3, 2], [F3, 2]]),
+  one('if-happy', '😄', "If You're Happy", [...q(C, F, F, F, F, E, F), [G, 2]],
+    [[REST, 1], [F3, 4], [F3, 2], [C3, 2]]),
+  one('this-old-man', '👴', 'This Old Man', [...q(G, E, G, G, E, G, A, G, F, E), [D, 2]],
+    [[C3, 6], [F3, 4], [G3, 2]]),
+  one('bingo', '🐕', 'Bingo', [...q(G, G, E, G, G, E, A, A, G, F, E), [D, 2]],
+    [[C3, 6], [F3, 3], [C3, 2], [G3, 2]]),
+  one('rain-away', '☔', 'Rain Rain Go Away', [...q(G, E, G, E, A, G), [E, 2]],
+    [[C3, 2], [C3, 2], [F3, 2], [C3, 2]]),
   // --- famous themes (short recognisable melody lines) ---
   one('fur-elise', '🎼', 'Für Elise', [[E5, 0.5], [DS5, 0.5], [E5, 0.5], [DS5, 0.5], [E5, 0.5], [B, 0.5], [D5, 0.5], [C5, 0.5], [A, 1.5], [REST, 0.5], [C, 0.5], [E, 0.5], [A, 0.5], [B, 2]]),
   one('jurassic', '🦕', 'Jurassic Park', [ // Journey to the Island — opening phrase (E♭), long–short–short lilt

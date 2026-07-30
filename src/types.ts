@@ -1,4 +1,5 @@
-export type SongNote = { midi: number; start: number; duration: number; hand?: 'L' | 'R' };
+// backing: accompaniment the app plays underneath — never drawn, guided, or scored
+export type SongNote = { midi: number; start: number; duration: number; hand?: 'L' | 'R'; backing?: boolean };
 export type Song = { title: string; notes: SongNote[]; bpm: number };
 
 // A NoteSource turns some input (screen taps, USB-MIDI, later the mic) into

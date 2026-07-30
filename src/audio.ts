@@ -15,9 +15,10 @@ export class Synth {
     } catch { /* no fetch/AudioWorklet support → oscillator */ }
   }
 
-  play(midi: number, velocity = 100) {
+  /** duration (seconds): backing notes release on time; kid notes ring naturally. */
+  play(midi: number, velocity = 100, duration?: number) {
     if (this.piano) {
-      this.piano.start({ note: midi, velocity });
+      this.piano.start({ note: midi, velocity, duration });
       return;
     }
     const t = this.ctx.currentTime;

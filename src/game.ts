@@ -1,4 +1,4 @@
-import type { Song, NoteSource } from './types';
+import type { Song, SongNote, NoteSource } from './types';
 import { Synth } from './audio';
 import { matchNote, pendingGroup, type PlayNote } from './scorer';
 import { Staff } from './staff';
@@ -6,6 +6,8 @@ import { Keys } from './domkeyboard';
 
 export class Game {
   private notes: PlayNote[] = [];
+  private backing: SongNote[] = []; // accompaniment: auto-played, unscored, undrawn
+  private backIdx = 0;              // next backing note the clock will fire
   private endTime = 0;
   private lastStart = 0; // start of the final note — finish shortly after it resolves
   private source?: NoteSource;
@@ -68,13 +70,15 @@ export class Game {
     this.stopDemo(); // a demo from the previous section must not leak into this one
     this.pause();
     this.synth.cut(); // kill note tails still ringing from the old section
-    this.notes = song.notes.map((n) => ({ ...n, hit: false, missed: false }));
+    this.backing = song.notes.filter((n) => n.backing).sort((a, b) => a.start - b.start);
+    const playable = song.notes.filter((n) => !n.backing);
+    this.notes = playable.map((n) => ({ ...n, hit: false, missed: false }));
     this.total = this.notes.length;
     this.learnerCount = this.notes.filter((n) => this.isLearner(n)).length;
-    this.endTime = this.notes.reduce((m, n) => Math.max(m, n.start + n.duration), 0);
+    this.endTime = song.notes.reduce((m, n) => Math.max(m, n.start + n.duration), 0);
     this.lastStart = this.notes.reduce((m, n) => Math.max(m, n.start), 0);
     this.clearLoop();
-    this.staff.setSong(song);
+    this.staff.setSong({ ...song, notes: playable });
     this.setPosition(0);
   }
 
@@ -104,6 +108,8 @@ export class Game {
     t = Math.max(0, Math.min(t, this.endTime + 0.5));
     this.songTime = t;
     this.holdStart = -1;
+    const bi = this.backing.findIndex((n) => n.start >= t - 0.01);
+    this.backIdx = bi < 0 ? this.backing.length : bi;
     if (t <= 0) { this.qualitySum = 0; this.wrongCount = 0; } // fresh round
     if (this._playing) this.startAt = this.ctx.currentTime - t / this.speed;
     this.notes.forEach((n, i) => {
@@ -256,6 +262,13 @@ export class Game {
       }
     }
     this.staff.setTime(now);
+
+    // accompaniment rides the same clock: while the group above holds `now`
+    // frozen, no backing note past it can fire — the band waits for the kid
+    while (this.backIdx < this.backing.length && this.backing[this.backIdx].start <= now + 0.02) {
+      const n = this.backing[this.backIdx++];
+      if (!this.muted) this.synth.play(n.midi, 65, n.duration / this.speed); // softer than the melody
+    }
 
     if (this.loopB >= 0 && now >= this.loopB + 0.25) {
       this.setPosition(this.loopA); // practice loop wraps

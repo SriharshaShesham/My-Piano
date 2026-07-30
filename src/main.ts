@@ -10,6 +10,7 @@ import { Tutor, speak, type TutorScript } from './tutor';
 import { Coach } from './coach';
 import { playVoice, stopVoice, noteVoice, type VoiceLine } from './voice';
 import { ScreenSource, MidiSource } from './sources';
+import { songFromMidi } from './midi';
 import { MicSource } from './mic';
 import { selfTestScorer, selfTestGroup } from './scorer';
 import type { NoteSource, Song } from './types';
@@ -48,6 +49,7 @@ function show(view: HTMLElement) {
 let songIdx = 0;
 let sectionIdx = 0;
 let practiceDrill: string | null = null; // playview is a daily drill, not a lesson
+let freeSong: Song | null = null;        // playview is an imported MIDI file — no rounds/quiz/points
 
 /* Each section is practiced 3 rounds; the final modal auto-advances in 10s.
    Scoring: 20 points per section = 14 playing (timing quality minus a wrong-
@@ -77,6 +79,21 @@ async function restart() {
 
 function showFinish(_h: number, t: number) {
   if (lessonStage) { advanceTwoHandStage(t); return; } // two-hand lesson: R→L→Both staging
+  if (freeSong) { // imported MIDI: play for fun, no scoring
+    overlay.innerHTML = `
+      <div class="card">
+        <div class="big">🎉</div>
+        <h2>You played it!</h2>
+        <div class="card-btns">
+          <button id="again">🔁 AGAIN</button>
+          <button id="toSongs">🎵 SONGS</button>
+        </div>
+      </div>`;
+    overlay.classList.remove('hidden');
+    document.getElementById('again')!.addEventListener('click', restart);
+    document.getElementById('toSongs')!.addEventListener('click', showSongs);
+    return;
+  }
   if (practiceDrill) { // daily drill: no rounds/quiz/points — mark it and done
     markDrillDone(practiceDrill);
     overlay.innerHTML = `
@@ -518,6 +535,7 @@ function teardown() {
   tutor.cancel();
   window.speechSynthesis?.cancel(); // stop any two-hand stage narration
   lessonStage = null;
+  freeSong = null;
   game.pause();
 }
 
@@ -778,6 +796,42 @@ function renderSongs() {
     b.addEventListener('click', () => openSection(si, 0));
     songsListEl.appendChild(b);
   });
+  const open = document.createElement('button');
+  open.className = 'lesson-row';
+  open.innerHTML = `
+    <span class="num">📂</span>
+    <span class="name">Play your own MIDI file<small>the melody is yours — the rest plays along</small></span>
+    <span class="stars"></span>`;
+  open.addEventListener('click', () => midiFile.click());
+  songsListEl.appendChild(open);
+}
+
+/* imported .mid → free play with backing (melody = highest-pitched track) */
+const midiFile = document.createElement('input');
+midiFile.type = 'file';
+midiFile.accept = '.mid,.midi';
+midiFile.addEventListener('change', async () => {
+  const f = midiFile.files?.[0];
+  midiFile.value = ''; // re-picking the same file must fire change again
+  if (!f) return;
+  try {
+    openMidiSong(songFromMidi(await f.arrayBuffer(), f.name.replace(/\.midi?$/i, '')));
+  } catch (e: any) {
+    alert(e?.message ?? 'Could not read that MIDI file.');
+  }
+});
+
+function openMidiSong(song: Song) {
+  teardown();
+  freeSong = song;
+  practiceDrill = null;
+  game.loadSong(song);
+  setupHands(song, 'both');
+  lessonTitle.textContent = `🎼 ${song.title}`;
+  lessonNav.innerHTML = '';
+  show(playviewEl);
+  ctx.resume(); // the file-pick click is the gesture
+  game.resume(); // wait-mode from the top, band follows the kid
 }
 
 /* ---------- profile page ---------- */
@@ -874,7 +928,7 @@ function renderChips() {
 
 /* ---------- navigation buttons ---------- */
 document.getElementById('back')!.addEventListener('click', () =>
-  practiceDrill ? showPractice() : SONGS[songIdx]?.category === 'songs' ? showSongs() : showMenu());
+  freeSong ? showSongs() : practiceDrill ? showPractice() : SONGS[songIdx]?.category === 'songs' ? showSongs() : showMenu());
 document.getElementById('menuBack')!.addEventListener('click', showLanding);
 document.getElementById('pvAvatar')!.addEventListener('click', showGate);
 document.getElementById('ppBack')!.addEventListener('click', showLanding);

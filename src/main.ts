@@ -12,10 +12,7 @@ import { playVoice, stopVoice, noteVoice, type VoiceLine } from './voice';
 import { ScreenSource, MidiSource } from './sources';
 import { songFromMidi } from './midi';
 import { MicSource } from './mic';
-import { selfTestScorer, selfTestGroup } from './scorer';
 import type { NoteSource, Song } from './types';
-
-if (import.meta.env.DEV) { selfTestScorer(); selfTestGroup(); }
 
 const ctx = new AudioContext();
 const staff = new Staff(document.getElementById('sheet')!);

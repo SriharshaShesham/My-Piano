@@ -28,31 +28,3 @@ export function matchNote(notes: PlayNote[], midi: number, now: number): number 
   }
   return best;
 }
-
-// ponytail: one runnable check for the only non-trivial logic in the app.
-// Runs on dev load (main.ts) and throws to the console if the matcher breaks.
-export function selfTestScorer() {
-  const mk = (midi: number, start: number): PlayNote =>
-    ({ midi, start, duration: 0.5, hit: false, missed: false });
-  const notes = [mk(60, 1.0), mk(60, 3.0), mk(62, 1.1)];
-  console.assert(matchNote(notes, 60, 1.0) === 0, 'exact match');
-  console.assert(matchNote(notes, 60, 1.3) === 0, 'in-window late');
-  console.assert(matchNote(notes, 60, 2.0) === -1, 'out of window');
-  console.assert(matchNote(notes, 64, 1.0) === -1, 'wrong pitch');
-  notes[0].hit = true;
-  console.assert(matchNote(notes, 60, 1.0) === -1, 'already-hit skipped');
-  console.assert(matchNote(notes, 62, 1.1) === 2, 'nearest correct pitch');
-  console.log('scorer self-test passed');
-}
-
-export function selfTestGroup() {
-  const mk = (midi: number, start: number): PlayNote =>
-    ({ midi, start, duration: 0.5, hit: false, missed: false });
-  const notes = [mk(60, 1.0), mk(64, 1.0), mk(67, 1.0), mk(72, 2.0)]; // C-E-G chord, then C5
-  console.assert(pendingGroup(notes).length === 3, 'chord = group of 3');
-  notes[0].hit = notes[1].hit = true;
-  console.assert(pendingGroup(notes).length === 1 && pendingGroup(notes)[0].midi === 67, 'partial chord: only the unhit tone remains');
-  notes[2].hit = true;
-  console.assert(pendingGroup(notes)[0]?.midi === 72, 'group advances after all hit');
-  console.log('group self-test passed');
-}

@@ -18,6 +18,10 @@ jobs:
 
       - run: npm ci
 
+      - run: npm run check
+
+      - run: npm test
+
       - run: npm run build
         env:
           # optional: empty → Google sign-in hidden, app runs local-only

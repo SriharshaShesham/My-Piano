@@ -712,7 +712,7 @@ function openDrill(id: string) {
   practiceDrill = id;
   game.loadSong(d.song);
   setupHands(d.song, d.hand);
-  lessonTitle.textContent = `${d.emoji} ${d.hand === 'L' ? 'Left hand' : 'Right hand'} · ${d.title}`;
+  lessonTitle.textContent = `${d.emoji} ${d.hand === 'both' ? 'Both hands' : d.hand === 'L' ? 'Left hand' : 'Right hand'} · ${d.title}`;
   lessonNav.innerHTML = ''; // no section chips in practice
   show(playviewEl);
   ctx.resume();
@@ -770,8 +770,8 @@ function renderDrills() {
       const b = document.createElement('button');
       b.className = 'lesson-row';
       b.innerHTML = `
-        <span class="num">${d.hand === 'R' ? '✋' : '🤚'}</span>
-        <span class="name">${d.hand === 'R' ? 'Right hand' : 'Left hand'}</span>
+        <span class="num">${d.hand === 'R' ? '✋' : d.hand === 'L' ? '🤚' : '🙌'}</span>
+        <span class="name">${d.hand === 'R' ? 'Right hand' : d.hand === 'L' ? 'Left hand' : 'Both hands together'}</span>
         <span class="stars">${done.has(d.id) ? '✅' : '⬜'}</span>`;
       b.addEventListener('click', () => openDrill(d.id));
       drillsEl.appendChild(b);

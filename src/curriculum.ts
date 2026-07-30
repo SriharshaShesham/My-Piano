@@ -378,7 +378,7 @@ export function getPoints(songId: string, sectionIdx: number): number {
 }
 
 /* ---------- daily finger drills: a typing-tutor ladder ---------- */
-export type Drill = { id: string; title: string; emoji: string; hand: 'L' | 'R'; level: number; song: Song };
+export type Drill = { id: string; title: string; emoji: string; hand: 'L' | 'R' | 'both'; level: number; song: Song };
 
 // ordered easy → hard; offsets are semitones from the hand's home C (0..24 keeps
 // both hands inside the C3..B5 keyboard). Each is played for both hands.
@@ -397,14 +397,15 @@ const LEVELS: { name: string; emoji: string; offs: number[] }[] = [
   { name: 'Long run', emoji: '🏃', offs: [0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0] },
 ];
 
-// right hand from middle C (C4=60), left hand from C3 (48) — one octave below
-function drill(lvIdx: number, hand: 'L' | 'R'): Drill {
+// right hand from middle C (C4=60), left hand from C3 (48) — one octave below;
+// 'both' = the same pattern in mirror motion, both hands striking together
+function drill(lvIdx: number, hand: 'L' | 'R' | 'both'): Drill {
   const { name, emoji, offs } = LEVELS[lvIdx];
-  const base = hand === 'R' ? 60 : 48;
-  const pairs: Pair[] = offs.map((o, i) => [base + o, i === offs.length - 1 ? 2 : 1]); // last note held
-  return { id: `${hand.toLowerCase()}-lvl${lvIdx + 1}`, title: name, emoji, hand, level: lvIdx + 1, song: song(name, pairs, hand) };
+  const mk = (h: 'L' | 'R'): Pair[] => offs.map((o, i) => [(h === 'R' ? 60 : 48) + o, i === offs.length - 1 ? 2 : 1]); // last note held
+  const s = hand === 'both' ? hands(name, mk('R'), mk('L')) : song(name, mk(hand), hand);
+  return { id: `${hand === 'both' ? 'b' : hand.toLowerCase()}-lvl${lvIdx + 1}`, title: name, emoji, hand, level: lvIdx + 1, song: s };
 }
-export const DRILLS: Drill[] = LEVELS.flatMap((_, i) => [drill(i, 'R'), drill(i, 'L')]);
+export const DRILLS: Drill[] = LEVELS.flatMap((_, i) => [drill(i, 'R'), drill(i, 'L'), drill(i, 'both')]);
 
 /* ---------- daily practice tracking (per profile, resets each day) ---------- */
 const dailyKey = (pid: string) => `piano-daily-${pid}`;

@@ -633,6 +633,7 @@ async function runConceptLesson(s: SongEntry) {
   if (!await step('🎵', 'The Melody', 'The tune — your right hand ✋. Listen!', 'The melody is the tune. Your right hand plays it. Listen!', onlyHand('R'))) return;
   if (!await step('🎵', 'The Bass', 'The low notes — your left hand 🤚. Listen!', 'The bass is the low notes underneath. Your left hand plays it. Listen!', onlyHand('L'))) return;
   if (!await step('🎶', 'Together!', 'Melody and bass together make music!', 'Now both together. The melody and the bass make music!', full)) return;
+  savePoints(s.id, 0, 20); // listening it through = done, or Continue targets it forever
   overlay.innerHTML = `<div class="card">
       <div class="big">🌟</div><h2>You did it!</h2>
       <p>Now you know <b>melody</b> and <b>bass</b>!</p>

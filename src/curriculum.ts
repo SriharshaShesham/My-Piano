@@ -142,9 +142,22 @@ const happyBirthday = entry('happy-birthday', '🎂', 'Happy Birthday', [
 const one = (id: string, emoji: string, title: string, phrase: Pair[]): SongEntry =>
   ({ ...entry(id, emoji, title, [phrase], ['Melody']), category: 'songs' });
 
-// two-hand lesson → a Learning-track entry taught hands-separately then together
-const twoHand = (id: string, emoji: string, title: string, r: Pair[], l: Pair[]): SongEntry =>
-  ({ id, emoji, title, category: 'twohand', sections: [{ title: 'Both hands', song: hands(title, r, l) }] });
+/** Two-hand lesson: phrase-sized sections (each staged R→L→Both by main.ts),
+ *  plus an auto-added "whole song" finale. Per phrase, both voices must span
+ *  the same beat total or the concatenated finale would drift apart. */
+type HandPhrase = { r: Pair[]; l: Pair[] };
+const beatSum = (ps: Pair[]) => ps.reduce((n, [, b]) => n + b, 0);
+function twoHandEntry(id: string, emoji: string, title: string, phrases: HandPhrase[], titles: string[]): SongEntry {
+  for (const p of phrases) console.assert(beatSum(p.r) === beatSum(p.l), `${id}: hands out of step (${beatSum(p.r)} vs ${beatSum(p.l)} beats)`);
+  const sections: Section[] = phrases.map((p, i) => ({ title: titles[i] ?? `Part ${i + 1}`, song: hands(title, p.r, p.l) }));
+  if (phrases.length > 1) {
+    sections.push({
+      title: 'The whole song',
+      song: hands(title, phrases.flatMap((p) => p.r), phrases.flatMap((p) => p.l)),
+    });
+  }
+  return { id, emoji, title, category: 'twohand', sections };
+}
 
 const songLibrary: SongEntry[] = [
   // --- kids rhymes (public domain) ---
@@ -171,19 +184,49 @@ const songLibrary: SongEntry[] = [
   one('pirates', '🏴‍☠️', "He's a Pirate", [[D, 1], [F, 1], [G, 1], [G, 2], [G, 1], [A, 1], [AS, 1], [AS, 2], [AS, 1], [C5, 1], [D5, 1], [C5, 1], [AS, 1], [A, 1], [G, 1], [A, 2]]),
   one('got', '🐉', 'Game of Thrones', [...q(G3, C, DS, F, G3, C, DS, F, G3, C, E), [F, 2]]),
   one('tetris', '🧱', 'Tetris', [[E, 1], [B, 0.5], [C5, 0.5], [D5, 1], [C5, 0.5], [B, 0.5], [A, 1], [A, 0.5], [C5, 0.5], [E5, 1], [D5, 0.5], [C5, 0.5], [B, 1.5], [C5, 0.5], [D5, 1], [E, 1], [C5, 1], [A, 1], [A, 2]]),
-  // --- concept lesson: what melody & bass mean (listen-only walkthrough) ---
+];
+
+/* ---------- two-hand track: concept intro + a 6-lesson coordination ladder,
+   each new lesson adds exactly one left-hand skill ---------- */
+const twinkleA: Pair[] = [...q(C, C, G, G, A, A), [G, 2]];
+const twinkleB: Pair[] = [...q(F, F, E, E, D, D), [C, 2]];
+
+const twoHandTrack: SongEntry[] = [
+  // what melody & bass mean (listen-only walkthrough)
   { id: 'concept-melody-bass', emoji: '🎓', title: 'Music Words: Melody & Bass', category: 'concept',
     sections: [{ title: 'Listen', song: hands('Melody & Bass', [...q(C, D, E, C), [G, 2]], [[C3, 2], [G3, 2], [C3, 2]]) }] },
-  // --- two-hand pieces (public domain) — right melody + left bass/chords ---
-  twoHand('twohand-scale', '🤝', 'C Scale · Both Hands',
-    [...q(C, D, E, F, G, F, E, D), [C, 2]],
-    [...q(C3, D3, E3, F3, G3, F3, E3, D3), [C3, 2]]),
-  twoHand('twohand-twinkle', '⭐', 'Twinkle · Both Hands',
-    [...q(C, C, G, G, A, A), [G, 2]],
-    [[C3, 2], [G3, 2], [A3, 2], [[C3, E3, G3], 2]]),
-  twoHand('twohand-ode', '🎵', 'Ode to Joy · Both Hands',
-    [...q(E, E, F, G, G, F, E, D, C, C, D, E), [E, 1.5], [D, 0.5], [D, 2]],
-    [[C3, 4], [G3, 4], [C3, 4], [G3, 4]]),
+  // 1. hands alternate — never together; the switching is the skill
+  twoHandEntry('th-turns', '🔄', 'Hands Take Turns', [
+    { r: [...q(C, D, E), [REST, 5]], l: [[REST, 4], ...q(C3, D3, E3), [REST, 1]] },
+    { r: [...q(E, D, C), [REST, 5]], l: [[REST, 4], ...q(E3, D3, C3), [REST, 1]] },
+    { r: [[C, 1], [D, 1], [REST, 2], [E, 1], [D, 1], [REST, 2]], l: [[REST, 2], [C3, 1], [D3, 1], [REST, 2], [E3, 1], [D3, 1]] },
+  ], ['Right says hi', 'Left echoes', 'Quick turns']),
+  // 2. left holds one sleepy whole note under the tune (Hot Cross Buns)
+  twoHandEntry('th-sleepy', '😴', 'Sleepy Bass · Hot Cross Buns', [
+    { r: [[E, 1], [D, 1], [C, 2]], l: [[C3, 4]] },
+    { r: [[E, 1], [D, 1], [C, 2]], l: [[G3, 4]] },
+    { r: [[C, 0.5], [C, 0.5], [C, 0.5], [C, 0.5], [D, 0.5], [D, 0.5], [D, 0.5], [D, 0.5], [E, 1], [D, 1], [C, 2]], l: [[C3, 2], [G3, 2], [C3, 4]] },
+  ], ['One sleepy note', 'A new bass note', 'Buns for everyone']),
+  // 3. left walks: one bass note per measure (Twinkle)
+  twoHandEntry('th-walking', '🚶', 'Walking Bass · Twinkle', [
+    { r: twinkleA, l: [[C3, 4], [G3, 4]] },
+    { r: twinkleB, l: [[F3, 4], [C3, 4]] },
+  ], ['Up to the star', 'Back down home']),
+  // 4. left keeps a steady half-note beat (Ode to Joy)
+  twoHandEntry('th-steady', '🥁', 'Steady Bass · Ode to Joy', [
+    { r: q(E, E, F, G, G, F, E, D), l: [[C3, 2], [C3, 2], [G3, 2], [G3, 2]] },
+    { r: [...q(C, C, D, E), [E, 1.5], [D, 0.5], [D, 2]], l: [[C3, 2], [C3, 2], [G3, 2], [G3, 2]] },
+  ], ['The famous bit', 'The landing']),
+  // 5. both hands play the same moves an octave apart
+  twoHandEntry('th-mirror', '🪞', 'Mirror Hands', [
+    { r: [...q(C, D, E, F), [G, 2]], l: [...q(C3, D3, E3, F3), [G3, 2]] },
+    { r: [...q(G, F, E, D), [C, 2]], l: [...q(G3, F3, E3, D3), [C3, 2]] },
+  ], ['March up', 'March down']),
+  // 6. left lays chord cushions under the melody (Twinkle)
+  twoHandEntry('th-chords', '🛏️', 'Chord Cushion · Twinkle', [
+    { r: twinkleA, l: [[[C3, E3, G3], 4], [[C3, F3, A3], 2], [[D3, G3, B3], 2]] },
+    { r: twinkleB, l: [[[C3, F3, A3], 2], [[C3, E3, G3], 2], [[D3, G3, B3], 2], [[C3, E3, G3], 2]] },
+  ], ['Star chords', 'Coming home']),
 ];
 
 export const SONGS: SongEntry[] = [
@@ -199,6 +242,7 @@ export const SONGS: SongEntry[] = [
   saints,
   jingleBells,
   happyBirthday,
+  ...twoHandTrack,
   ...songLibrary,
 ];
 

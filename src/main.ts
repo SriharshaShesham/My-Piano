@@ -3,18 +3,18 @@ import { Game } from './game';
 import { Staff, STAFF_H, PX_PER_SEC } from './staff';
 import { Keys } from './domkeyboard';
 import { Synth } from './audio';
-import { SONGS, DRILLS, savePoints, getPoints, getProfiles, activeProfile, setActiveProfile, addProfile, updateProfile, loadSettings, saveSettings, getDailyDone, markDrillDone, type Profile } from './curriculum';
+import { SONGS, DRILLS, savePoints, getPoints, getProfiles, activeProfile, setActiveProfile, addProfile, updateProfile, loadSettings, saveSettings, getDailyDone, markDrillDone, type Profile, type SongEntry } from './curriculum';
 import { initAuth, signInWithGoogle, activateProfile as activateAuth, signOutGoogle } from './sync';
 import { Hand, fingerFor, FINGER_NAMES, noteLabel } from './hand';
-import { Tutor, type TutorScript } from './tutor';
+import { Tutor, speak, type TutorScript } from './tutor';
 import { Coach } from './coach';
 import { playVoice, stopVoice, noteVoice, type VoiceLine } from './voice';
 import { ScreenSource, MidiSource } from './sources';
 import { MicSource } from './mic';
-import { selfTestScorer } from './scorer';
-import type { NoteSource } from './types';
+import { selfTestScorer, selfTestGroup } from './scorer';
+import type { NoteSource, Song } from './types';
 
-if (import.meta.env.DEV) selfTestScorer();
+if (import.meta.env.DEV) { selfTestScorer(); selfTestGroup(); }
 
 const ctx = new AudioContext();
 const staff = new Staff(document.getElementById('sheet')!);
@@ -76,6 +76,7 @@ async function restart() {
 }
 
 function showFinish(_h: number, t: number) {
+  if (lessonStage) { advanceTwoHandStage(t); return; } // two-hand lesson: R→L→Both staging
   if (practiceDrill) { // daily drill: no rounds/quiz/points — mark it and done
     markDrillDone(practiceDrill);
     overlay.innerHTML = `
@@ -94,8 +95,9 @@ function showFinish(_h: number, t: number) {
     return;
   }
 
-  const { sum, wrong } = game.roundQuality;
-  const playPts = Math.min(PLAY_PTS, Math.round((PLAY_PTS * Math.max(0, sum - 0.25 * wrong)) / Math.max(t, 1)));
+  const { sum, wrong, total } = game.roundQuality;
+  // divide by the notes the learner actually owed (hands-separate plays fewer)
+  const playPts = Math.min(PLAY_PTS, Math.round((PLAY_PTS * Math.max(0, sum - 0.25 * wrong)) / Math.max(total || t, 1)));
   bestPlay = Math.max(bestPlay, playPts);
   savePoints(SONGS[songIdx].id, sectionIdx, playPts); // partial credit if the kid quits here
   round++;
@@ -163,8 +165,51 @@ const game = new Game(staff, keys, ctx, synth, showScore, showFinish);
 game.onStateChange = (playing) => {
   playBtn.textContent = playing ? '⏸ Pause' : '▶ Play';
 };
-const hand = new Hand(document.getElementById('hand')!);
-game.onGuide = (midi) => hand.setNote(midi);
+const handL = new Hand(document.getElementById('handL')!); handL.setHand('L');
+const handR = new Hand(document.getElementById('handR')!); handR.setHand('R');
+game.onGuide = (notes) => {
+  handR.setNote(notes.filter((n) => n.hand !== 'L').map((n) => n.midi)); // untagged notes → right
+  handL.setNote(notes.filter((n) => n.hand === 'L').map((n) => n.midi));
+};
+/** Show only the hand widget(s) a piece actually uses. */
+function showHandWidgets(hasR: boolean, hasL: boolean) {
+  document.getElementById('handR')!.classList.toggle('hidden', !hasR);
+  document.getElementById('handL')!.classList.toggle('hidden', !hasL);
+}
+
+/* ---------- hands practice mode (Right / Left / Both) ---------- */
+const handBtns = [...document.querySelectorAll<HTMLButtonElement>('.hnd')];
+const handsModeEl = document.getElementById('handsMode')!;
+let curHands: 'L' | 'R' | 'both' = 'both';
+let lessonStage: 'L' | 'R' | 'both' | null = null; // non-null while a two-hand lesson is stepping R→L→Both
+
+function applyHands(mode: 'L' | 'R' | 'both') {
+  curHands = mode;
+  game.setHands(mode);
+  handBtns.forEach((b) => b.classList.toggle('active', b.dataset.hand === mode));
+  if (lessonStage) lessonStage = mode; // manual switch mid-lesson keeps the stage in sync
+}
+handBtns.forEach((b) => b.addEventListener('click', () => applyHands(b.dataset.hand as 'L' | 'R' | 'both')));
+
+/** Configure the play view for a song: widget visibility, the toggle, default mode. */
+function setupHands(song: Song, dflt: 'L' | 'R' | 'both') {
+  const hasR = song.notes.some((n) => n.hand !== 'L'); // untagged (mono) notes → right
+  const hasL = song.notes.some((n) => n.hand === 'L');
+  const both = hasR && hasL;
+  showHandWidgets(hasR, hasL);
+  handsModeEl.classList.toggle('hidden', !both); // toggle only matters for two-hand pieces
+  applyHands(both ? dflt : hasL ? 'L' : 'R');
+  micGuard();
+}
+
+/** Mic hears one note at a time — can't play both hands together. Force separate. */
+function micGuard() {
+  const bothBtn = handBtns.find((b) => b.dataset.hand === 'both')!;
+  const block = currentSrc === 'mic' && !handsModeEl.classList.contains('hidden');
+  bothBtn.disabled = block;
+  bothBtn.title = block ? 'Mic hears one note at a time — use Tap or USB MIDI for both hands' : '';
+  if (block && curHands === 'both') applyHands('R');
+}
 
 /* ---------- key-intro card: where's the new key? (center screen) ---------- */
 const keyIntro = document.getElementById('keyIntro')!;
@@ -220,7 +265,7 @@ let demoGen = 0; // cancels the multi-step demo flow when the tutor is skipped
 const tutor = new Tutor(document.getElementById('tutor')!, {
   demoNote: (midi) => {
     game.play(midi); // real key press: flash + sound (fires before the wait arms)
-    hand.setNote(midi);
+    handR.setNote(midi);
     keys.setGuide(midi); // hold the teal highlight on the real key
     showKeyIntro(midi); // centered "here's where it lives" card
     return waitForKey(midi); // tutor proceeds once the kid presses it
@@ -273,7 +318,7 @@ async function runQuiz(): Promise<number | null> {
 
   quizOn = true;
   keys.setGuide(-1);
-  hand.setNote(-1);
+  handR.setNote(-1); handL.setNote(-1);
   staff.svg.classList.add('noletters'); // no giving away the answers
   staff.setSong({ ...sec, notes: seq.map((m, i) => ({ midi: m, start: i * STEP, duration: 0.45 })) });
   await coach.play('QuizTime'); // "can you find the mystery notes?"
@@ -471,6 +516,8 @@ function teardown() {
   coach.stop();
   overlay.classList.add('hidden'); // popups must not survive navigation
   tutor.cancel();
+  window.speechSynthesis?.cancel(); // stop any two-hand stage narration
+  lessonStage = null;
   game.pause();
 }
 
@@ -512,25 +559,115 @@ function showMenu() {
   if (fromLesson) coach.play('Goodbye'); // non-blocking wave over the menu
 }
 
+/** Two-hand lesson: teach one hand at a time, then together. Each stage shows a
+ *  prompt, then plays that hand in wait-mode (the other hand auto-plays). */
+const STAGE_PROMPT = {
+  R: ['✋', 'Right hand first!', 'Just the melody — play with your right hand.'],
+  L: ['🤚', 'Now the left hand!', 'Just the bass — play with your left hand.'],
+  both: ['🙌', 'Both hands together!', "Now put them together — you've got this!"],
+} as const;
+
+function startTwoHandStage(stage: 'L' | 'R' | 'both') {
+  lessonStage = stage;
+  applyHands(stage);
+  game.setPosition(0);
+  const gen = openGen;
+  const [emoji, title, sub] = STAGE_PROMPT[stage];
+  overlay.innerHTML = `<div class="card"><div class="big">${emoji}</div><h2>${title}</h2><p>${sub}</p></div>`;
+  overlay.classList.remove('hidden');
+  speak(`${title} ${sub}`);
+  autoT = window.setTimeout(() => {
+    if (gen !== openGen) return;
+    overlay.classList.add('hidden');
+    ctx.resume();
+    game.resume(); // wait-mode for this hand
+  }, 2600);
+}
+
+/** A two-hand lesson stage finished → advance R→L→Both, or score the Both pass. */
+function advanceTwoHandStage(t: number) {
+  const gen = openGen;
+  if (lessonStage === 'R') { coach.play('GoodJob').then(() => gen === openGen && startTwoHandStage('L')); return; }
+  if (lessonStage === 'L') { coach.play('GoodJob').then(() => gen === openGen && startTwoHandStage('both')); return; }
+  const { sum, wrong, total } = game.roundQuality; // both-hands pass → full 20-point score
+  const pts = Math.min(20, Math.round((20 * Math.max(0, sum - 0.25 * wrong)) / Math.max(total || t, 1)));
+  lessonStage = null;
+  coach.play('SectionComplete').then(() => gen === openGen && showStars(pts));
+}
+
+/** Short "these are the two parts" intro shown once when a two-hand lesson opens. */
+async function teachConcept() {
+  const gen = openGen;
+  overlay.innerHTML = `<div class="card">
+      <div class="big">🎵</div>
+      <h2>Two parts!</h2>
+      <p>The <b>melody</b> is the tune — your right hand ✋<br>
+         The <b>bass</b> is the low notes — your left hand 🤚</p>
+    </div>`;
+  overlay.classList.remove('hidden');
+  await speak('This song has two parts. The melody is the tune — your right hand plays it. The bass is the low notes — your left hand plays it.');
+  if (gen !== openGen) return;
+  await new Promise((r) => { autoT = window.setTimeout(r, 500); });
+  if (gen !== openGen) return;
+  overlay.classList.add('hidden');
+}
+
+/** Standalone "Music Words" lesson: hear the melody alone, the bass alone, then both. */
+async function runConceptLesson(s: SongEntry) {
+  const gen = openGen;
+  const full = s.sections[0].song;
+  const onlyHand = (h: 'L' | 'R'): Song =>
+    ({ ...full, notes: full.notes.filter((n) => (h === 'R' ? n.hand !== 'L' : n.hand === 'L')) });
+  const step = async (emoji: string, title: string, body: string, say: string, song: Song) => {
+    if (gen !== openGen) return false;
+    overlay.innerHTML = `<div class="card"><div class="big">${emoji}</div><h2>${title}</h2><p>${body}</p></div>`;
+    overlay.classList.remove('hidden');
+    await speak(say);
+    if (gen !== openGen) return false;
+    overlay.classList.add('hidden');
+    game.loadSong(song);
+    setupHands(song, 'both');
+    await game.demo(); // app plays this part hands-free
+    return gen === openGen;
+  };
+  if (!await step('🎵', 'The Melody', 'The tune — your right hand ✋. Listen!', 'The melody is the tune. Your right hand plays it. Listen!', onlyHand('R'))) return;
+  if (!await step('🎵', 'The Bass', 'The low notes — your left hand 🤚. Listen!', 'The bass is the low notes underneath. Your left hand plays it. Listen!', onlyHand('L'))) return;
+  if (!await step('🎶', 'Together!', 'Melody and bass together make music!', 'Now both together. The melody and the bass make music!', full)) return;
+  overlay.innerHTML = `<div class="card">
+      <div class="big">🌟</div><h2>You did it!</h2>
+      <p>Now you know <b>melody</b> and <b>bass</b>!</p>
+      <div class="card-btns"><button id="conceptDone">🏠 Done</button></div>
+    </div>`;
+  overlay.classList.remove('hidden');
+  document.getElementById('conceptDone')!.addEventListener('click', showMenu);
+}
+
 function openSection(si: number, sec: number, withTutor = true) {
   const fromMenu = !menuEl.classList.contains('hidden');
   teardown();
   const gen = openGen;
   practiceDrill = null;
-  hand.setHand('R');
-  staff.octaveShift = 0;
+  lessonStage = null;
   round = 0;
   bestPlay = 0;
   songIdx = si;
   sectionIdx = sec;
   const s = SONGS[si];
   game.loadSong(s.sections[sec].song);
+  setupHands(s.sections[sec].song, 'both');
   lessonTitle.textContent = `${s.emoji} ${s.title}`;
   renderChips();
   show(playviewEl);
   if (!withTutor) return;
   ctx.resume(); // opened via user tap — unlock audio for the clips + TTS
   (async () => {
+    if (s.category === 'concept') { await runConceptLesson(s); return; } // listen-only "what is melody/bass"
+    if (s.category === 'twohand') { // teach hands separately, then together
+      if (fromMenu) { await coach.play('LessonWelcome'); if (gen !== openGen) return; await teachConcept(); }
+      if (gen !== openGen) return;
+      startTwoHandStage('R');
+      return;
+    }
     if (s.category === 'songs') {
       // Songs library: play the tune through once so they hear it, then hand over
       await coach.play('WatchMeIntro');
@@ -557,9 +694,8 @@ function openDrill(id: string) {
   if (!d) return;
   teardown();
   practiceDrill = id;
-  hand.setHand(d.hand);
-  staff.octaveShift = d.hand === 'L' ? 1 : 0; // draw C3 drills up an octave
   game.loadSong(d.song);
+  setupHands(d.song, d.hand);
   lessonTitle.textContent = `${d.emoji} ${d.hand === 'L' ? 'Left hand' : 'Right hand'} · ${d.title}`;
   lessonNav.innerHTML = ''; // no section chips in practice
   show(playviewEl);
@@ -699,8 +835,17 @@ ppVideos.addEventListener('click', () => {
 
 function renderMenu() {
   coursesEl.innerHTML = '';
+  const heads: Record<string, string> = { concept: '🎓 Music Words', twohand: '🙌 Two Hands' };
+  const shown = new Set<string>();
   SONGS.forEach((s, si) => {
     if (s.category === 'songs') return; // Songs library has its own page
+    if (s.category && heads[s.category] && !shown.has(s.category)) { // section header once per group
+      const h = document.createElement('h2');
+      h.className = 'course-head';
+      h.textContent = heads[s.category];
+      coursesEl.appendChild(h);
+      shown.add(s.category);
+    }
     const done = s.sections.filter((_, i) => getPoints(s.id, i) > 0).length;
     const whole = starsOf(getPoints(s.id, s.sections.length - 1));
     const b = document.createElement('button');
@@ -770,6 +915,8 @@ async function chooseSource(name: string, quiet = false) {
     saveSettings({ source: name });
     micReadout.classList.toggle('hidden', name !== 'mic');
     srcBtns.forEach((b) => b.classList.toggle('active', b.dataset.src === name));
+    micGuard(); // mic can't play both hands at once
+
   } catch (e: any) {
     if (quiet) { if (name !== 'screen') chooseSource('screen', true); return; }
     const msg = e?.name === 'NotAllowedError'
@@ -780,6 +927,18 @@ async function chooseSource(name: string, quiet = false) {
   }
 }
 srcBtns.forEach((b) => b.addEventListener('click', () => chooseSource(b.dataset.src!)));
+
+// phone: sources live behind a ☰ toggle — open/close it, and close on selection
+const sourcesEl = document.getElementById('sources')!;
+const srcToggle = document.getElementById('srcToggle')!;
+srcToggle.addEventListener('click', () => {
+  const open = sourcesEl.classList.toggle('open');
+  srcToggle.setAttribute('aria-expanded', String(open));
+});
+srcBtns.forEach((b) => b.addEventListener('click', () => {
+  sourcesEl.classList.remove('open');
+  srcToggle.setAttribute('aria-expanded', 'false');
+}));
 
 /* ---------- device detection ---------- */
 const midiBtn = srcBtns.find((b) => b.dataset.src === 'midi')!;

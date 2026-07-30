@@ -8,7 +8,7 @@ const noteName = (midi: number) => NAMES[((midi % 12) + 12) % 12];
 export class Keys {
   onPress: (midi: number) => void = () => {};
   private keyEls = new Map<number, HTMLElement>();
-  private guideEl: HTMLElement | null = null;
+  private guideEls: HTMLElement[] = [];
 
   constructor(container: HTMLElement, start = 48, octaves = 3) {
     const whiteCount = octaves * 7;
@@ -48,21 +48,26 @@ export class Keys {
     setTimeout(() => el.classList.remove('pressed'), 160);
   }
 
-  /** Highlight the key the kid should play next (teal + note name). */
-  setGuide(midi: number) {
-    if (this.guideEl) {
-      this.guideEl.classList.remove('guide');
-      this.guideEl.querySelector('.label')?.remove();
+  /** Highlight the key(s) to play next (teal + note name). A number, a list
+   *  (a chord / both-hands beat), or -1 / [] to clear. */
+  setGuide(midi: number | number[]) {
+    for (const el of this.guideEls) {
+      el.classList.remove('guide');
+      el.querySelector('.label')?.remove();
     }
-    this.guideEl = this.keyEls.get(midi) ?? null;
-    if (this.guideEl) {
-      this.guideEl.classList.add('guide');
+    this.guideEls = [];
+    const midis = (Array.isArray(midi) ? midi : [midi]).filter((m) => m >= 0);
+    for (const m of midis) {
+      const el = this.keyEls.get(m);
+      if (!el) continue;
+      el.classList.add('guide');
       const label = document.createElement('span');
       label.className = 'label';
-      label.textContent = noteName(midi);
-      this.guideEl.appendChild(label);
-      // keep the next key on-screen when the keyboard overflows (narrow viewports)
-      this.guideEl.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+      label.textContent = noteName(m);
+      el.appendChild(label);
+      this.guideEls.push(el);
     }
+    // keep the next key(s) on-screen when the keyboard overflows (narrow viewports)
+    this.guideEls[0]?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }
 }

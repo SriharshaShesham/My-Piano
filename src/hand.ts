@@ -60,10 +60,12 @@ export class Hand {
     this.container.classList.toggle('lefty', h === 'L');
   }
 
-  /** Highlight the finger for this midi note; -1 clears. */
-  setNote(midi: number) {
-    const f = midi >= 0 ? fingerFor(midi, this.hand) : -1;
-    for (let i = 1; i <= 5; i++) this.parts[i]?.classList.toggle('on', i === f);
-    this.badge.innerHTML = f > 0 ? `${this.hand === 'L' ? 'Left' : ''} Finger ${f} · ${FINGER_NAMES[f]}` : '&nbsp;';
+  /** Highlight the finger(s) for these midi note(s); -1 / [] clears. */
+  setNote(midi: number | number[]) {
+    const midis = (Array.isArray(midi) ? midi : [midi]).filter((m) => m >= 0);
+    const fingers = new Set(midis.map((m) => fingerFor(m, this.hand)));
+    for (let i = 1; i <= 5; i++) this.parts[i]?.classList.toggle('on', fingers.has(i));
+    const names = [...fingers].sort().map((f) => FINGER_NAMES[f]);
+    this.badge.innerHTML = names.length ? `${this.hand === 'L' ? 'Left' : 'Right'} · ${names.join(' + ')}` : '&nbsp;';
   }
 }

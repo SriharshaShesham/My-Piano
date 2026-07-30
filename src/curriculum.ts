@@ -1,23 +1,34 @@
 import type { Song, SongNote } from './types';
 
 export type Section = { title: string; song: Song };
-export type SongEntry = { id: string; emoji: string; title: string; sections: Section[]; category?: 'songs' };
+export type SongEntry = { id: string; emoji: string; title: string; sections: Section[]; category?: 'songs' | 'twohand' | 'concept' };
 
 const BEAT = 0.5; // seconds per quarter note (120 bpm)
-type Pair = [number, number]; // [midi, beats]
+type Pair = [number | number[], number]; // [midi | chord, beats]
 
 // ponytail: hardcoded public-domain tunes as [midi, beats] phrases;
 // @tonejs/midi produces the same Song shape if we ever import files.
-function song(title: string, pairs: Pair[]): Song {
+// A slot's midi may be an array → a blocked chord (all notes share start).
+function song(title: string, pairs: Pair[], hand?: 'L' | 'R'): Song {
   const notes: SongNote[] = [];
   let t = 1.2; // lead-in
-  for (const [midi, beats] of pairs) {
-    if (midi > 0) notes.push({ midi, start: t, duration: beats * BEAT }); // midi 0 = rest
-    t += beats * BEAT;
+  for (const [m, beats] of pairs) {
+    const dur = beats * BEAT;
+    for (const midi of Array.isArray(m) ? m : [m])
+      if (midi > 0) notes.push({ midi, start: t, duration: dur, ...(hand ? { hand } : {}) }); // midi 0 = rest
+    t += dur;
   }
   return { title, notes, bpm: 120 };
 }
 const REST = 0;
+
+/** Two-hand piece: a right-hand voice + a left-hand voice on one timeline
+ *  (both from the same lead-in). Chords = array slots; see song(). */
+function hands(title: string, right: Pair[], left: Pair[]): Song {
+  const notes = [...song(title, right, 'R').notes, ...song(title, left, 'L').notes]
+    .sort((a, b) => a.start - b.start);
+  return { title, notes, bpm: 120 };
+}
 
 /** Sections = each phrase alone, then the whole song (if more than one). */
 function entry(id: string, emoji: string, title: string, phrases: Pair[][], phraseTitles?: string[]): SongEntry {
@@ -33,7 +44,7 @@ const C = 60, D = 62, E = 64, F = 65, G = 67, A = 69, AS = 70, C5 = 72, G3 = 55;
 const q = (...ms: number[]): Pair[] => ms.map((m) => [m, 1]);
 
 // wider palette for the Songs library (keyboard spans C3=48 .. B5=83)
-const DS3 = 51, E3 = 52, F3 = 53, FS3 = 54, AS3 = 58, B3 = 59;
+const C3 = 48, D3 = 50, DS3 = 51, E3 = 52, F3 = 53, FS3 = 54, A3 = 57, AS3 = 58, B3 = 59;
 const DS = 63, FS = 66, B = 71;
 const D5 = 74, DS5 = 75, E5 = 76, F5 = 77, G5 = 79;
 
@@ -131,6 +142,10 @@ const happyBirthday = entry('happy-birthday', '🎂', 'Happy Birthday', [
 const one = (id: string, emoji: string, title: string, phrase: Pair[]): SongEntry =>
   ({ ...entry(id, emoji, title, [phrase], ['Melody']), category: 'songs' });
 
+// two-hand lesson → a Learning-track entry taught hands-separately then together
+const twoHand = (id: string, emoji: string, title: string, r: Pair[], l: Pair[]): SongEntry =>
+  ({ id, emoji, title, category: 'twohand', sections: [{ title: 'Both hands', song: hands(title, r, l) }] });
+
 const songLibrary: SongEntry[] = [
   // --- kids rhymes (public domain) ---
   one('itsy-spider', '🕷️', 'Itsy Bitsy Spider', [...q(G, C, C, C, D, E, E, E, D, C, D, E), [C, 2]]),
@@ -156,6 +171,19 @@ const songLibrary: SongEntry[] = [
   one('pirates', '🏴‍☠️', "He's a Pirate", [[D, 1], [F, 1], [G, 1], [G, 2], [G, 1], [A, 1], [AS, 1], [AS, 2], [AS, 1], [C5, 1], [D5, 1], [C5, 1], [AS, 1], [A, 1], [G, 1], [A, 2]]),
   one('got', '🐉', 'Game of Thrones', [...q(G3, C, DS, F, G3, C, DS, F, G3, C, E), [F, 2]]),
   one('tetris', '🧱', 'Tetris', [[E, 1], [B, 0.5], [C5, 0.5], [D5, 1], [C5, 0.5], [B, 0.5], [A, 1], [A, 0.5], [C5, 0.5], [E5, 1], [D5, 0.5], [C5, 0.5], [B, 1.5], [C5, 0.5], [D5, 1], [E, 1], [C5, 1], [A, 1], [A, 2]]),
+  // --- concept lesson: what melody & bass mean (listen-only walkthrough) ---
+  { id: 'concept-melody-bass', emoji: '🎓', title: 'Music Words: Melody & Bass', category: 'concept',
+    sections: [{ title: 'Listen', song: hands('Melody & Bass', [...q(C, D, E, C), [G, 2]], [[C3, 2], [G3, 2], [C3, 2]]) }] },
+  // --- two-hand pieces (public domain) — right melody + left bass/chords ---
+  twoHand('twohand-scale', '🤝', 'C Scale · Both Hands',
+    [...q(C, D, E, F, G, F, E, D), [C, 2]],
+    [...q(C3, D3, E3, F3, G3, F3, E3, D3), [C3, 2]]),
+  twoHand('twohand-twinkle', '⭐', 'Twinkle · Both Hands',
+    [...q(C, C, G, G, A, A), [G, 2]],
+    [[C3, 2], [G3, 2], [A3, 2], [[C3, E3, G3], 2]]),
+  twoHand('twohand-ode', '🎵', 'Ode to Joy · Both Hands',
+    [...q(E, E, F, G, G, F, E, D, C, C, D, E), [E, 1.5], [D, 0.5], [D, 2]],
+    [[C3, 4], [G3, 4], [C3, 4], [G3, 4]]),
 ];
 
 export const SONGS: SongEntry[] = [
@@ -317,7 +345,7 @@ function drill(lvIdx: number, hand: 'L' | 'R'): Drill {
   const { name, emoji, offs } = LEVELS[lvIdx];
   const base = hand === 'R' ? 60 : 48;
   const pairs: Pair[] = offs.map((o, i) => [base + o, i === offs.length - 1 ? 2 : 1]); // last note held
-  return { id: `${hand.toLowerCase()}-lvl${lvIdx + 1}`, title: name, emoji, hand, level: lvIdx + 1, song: song(name, pairs) };
+  return { id: `${hand.toLowerCase()}-lvl${lvIdx + 1}`, title: name, emoji, hand, level: lvIdx + 1, song: song(name, pairs, hand) };
 }
 export const DRILLS: Drill[] = LEVELS.flatMap((_, i) => [drill(i, 'R'), drill(i, 'L')]);
 

@@ -4,9 +4,12 @@ import type { Song, SongNote } from './types';
 // pipeline this replaces is what blurred). Monophonic kid songs only need
 // heads/stems/ledgers/sharps — no engraving library required.
 const S = 30;                    // staff line spacing
-const TOP = 70;                  // y of top staff line (lines at 70..190)
-const C4_Y = TOP + 5 * S;        // middle C: first ledger line below staff
-export const STAFF_H = 310;
+const TOP = 70;                  // y of top treble line (lines at 70..190)
+const C4_Y = TOP + 5 * S;        // 220 middle C: one ledger below the treble staff
+const BASS_TOP = C4_Y + S;       // 250 top bass line (middle C = one ledger above it)
+const TREBLE_MID = TOP + 2 * S;  // 130 middle line, treble
+const BASS_MID = BASS_TOP + 2 * S; // 310 middle line, bass
+export const STAFF_H = 430;      // grand staff: treble 70..190 + bass 250..370 + margins
 export const PX_PER_SEC = 130;   // horizontal scroll speed at 1×
 const CURSOR_FRAC = 0.42;
 const CLEF_W = 120;
@@ -37,17 +40,19 @@ function el(name: string, attrs: Record<string, string | number> = {}): SVGEleme
   return e as SVGElement;
 }
 
-function noteGlyph(n: SongNote, beat: number): SVGGElement {
+function noteGlyph(n: SongNote, beat: number, bass: boolean, chord: boolean): SVGGElement {
   const { y, sharp } = staffPos(n.midi);
   const g = el('g', { class: 'snote', transform: `translate(${timeToX(n.start)} ${y})` }) as SVGGElement;
-  // ledger lines between the staff and the note
-  if (y >= C4_Y) for (let ly = C4_Y; ly <= y; ly += S) g.appendChild(el('line', { x1: -26, x2: 26, y1: ly - y, y2: ly - y, class: 'ledger' }));
-  if (y <= TOP - S) for (let ly = TOP - S; ly >= y; ly -= S) g.appendChild(el('line', { x1: -26, x2: 26, y1: ly - y, y2: ly - y, class: 'ledger' }));
+  // ledger lines between the note's OWN staff (treble or bass) and the note
+  const topLine = bass ? BASS_TOP : TOP;
+  const botLine = topLine + 4 * S;
+  for (let ly = botLine + S; ly <= y; ly += S) g.appendChild(el('line', { x1: -26, x2: 26, y1: ly - y, y2: ly - y, class: 'ledger' }));
+  for (let ly = topLine - S; ly >= y; ly -= S) g.appendChild(el('line', { x1: -26, x2: 26, y1: ly - y, y2: ly - y, class: 'ledger' }));
   const beats = n.duration / beat;
   const open = beats >= 2;
   g.appendChild(el('ellipse', { rx: 14.5, ry: 10.5, transform: 'rotate(-18)', class: open ? 'head open' : 'head' }));
-  if (beats < 4) {
-    const up = y >= TOP + 2 * S; // stems up below the middle line, down above
+  if (beats < 4 && !chord) { // ponytail: chords render as stacked heads, no stem; shared-stem engraving deferred
+    const up = y >= (bass ? BASS_MID : TREBLE_MID); // stems up below the middle line, down above
     g.appendChild(up
       ? el('line', { x1: 13.5, y1: -4, x2: 13.5, y2: -92, class: 'stem' })
       : el('line', { x1: -13.5, y1: 4, x2: -13.5, y2: 92, class: 'stem' }));
@@ -65,10 +70,6 @@ function noteGlyph(n: SongNote, beat: number): SVGGElement {
 }
 
 export class Staff {
-  // ponytail: display-only octave shift — left-hand drills (C3..C4) would clip
-  // below the treble staff, so they draw an octave up; letters and the real
-  // keyboard guide stay honest. Bass clef is the upgrade path if ever needed.
-  octaveShift = 0;
   readonly svg: SVGSVGElement;
   private lines: SVGElement[] = [];
   private clefLines: SVGElement[] = [];
@@ -86,8 +87,8 @@ export class Staff {
     this.svg = el('svg', { class: 'staff', viewBox: `0 0 100 ${STAFF_H}`, preserveAspectRatio: 'none' }) as SVGSVGElement;
 
     const linesG = el('g', { class: 'lines' });
-    for (let i = 0; i < 5; i++) {
-      const l = el('line', { x1: 0, y1: TOP + i * S, x2: 100, y2: TOP + i * S });
+    for (const top of [TOP, BASS_TOP]) for (let i = 0; i < 5; i++) {
+      const l = el('line', { x1: 0, y1: top + i * S, x2: 100, y2: top + i * S });
       this.lines.push(l);
       linesG.appendChild(l);
     }
@@ -103,14 +104,24 @@ export class Staff {
     // clef sits on top so scrolled-past notes disappear behind it
     const clefG = el('g', { class: 'clef-group' });
     clefG.appendChild(el('rect', { x: 0, y: 0, width: CLEF_W, height: STAFF_H, class: 'clef-bg' }));
-    for (let i = 0; i < 5; i++) {
-      const l = el('line', { x1: 0, y1: TOP + i * S, x2: CLEF_W, y2: TOP + i * S });
+    for (const top of [TOP, BASS_TOP]) for (let i = 0; i < 5; i++) {
+      const l = el('line', { x1: 0, y1: top + i * S, x2: CLEF_W, y2: top + i * S });
       this.clefLines.push(l);
       clefG.appendChild(l);
     }
-    const clef = el('text', { x: 24, y: TOP + 4 * S + 6, class: 'clef' });
-    clef.textContent = '𝄞';
-    clefG.appendChild(clef);
+    // brace joining the two staves (ponytail: square bracket, not an engraved curly brace)
+    for (const seg of [
+      { x1: 8, y1: TOP, x2: 8, y2: BASS_TOP + 4 * S }, // spine
+      { x1: 8, y1: TOP, x2: 18, y2: TOP },             // top cap
+      { x1: 8, y1: BASS_TOP + 4 * S, x2: 18, y2: BASS_TOP + 4 * S }, // bottom cap
+    ]) clefG.appendChild(el('line', seg));
+    const treble = el('text', { x: 30, y: TOP + 4 * S + 6, class: 'clef' });
+    treble.textContent = '𝄞';
+    clefG.appendChild(treble);
+    // ponytail: bass clef glyph baseline mirrors the treble one; nudge if a font sits it oddly
+    const bass = el('text', { x: 30, y: BASS_TOP + 3 * S, class: 'clef bass' });
+    bass.textContent = '𝄢';
+    clefG.appendChild(bass);
     this.svg.appendChild(clefG);
 
     this.cursor = el('rect', { y: 16, width: 30, height: STAFF_H - 32, rx: 10, class: 'cursor' });
@@ -146,8 +157,12 @@ export class Staff {
     this.scroll.appendChild(this.loopRect); // survives song swaps
     this.setLoop(-1, -1);
     const beat = 60 / song.bpm;
+    // notes sharing a hand + start are a chord (drawn stemless, stacked)
+    const key = (n: SongNote) => `${n.hand ?? 'R'}@${Math.round(n.start * 100)}`;
+    const counts = new Map<string, number>();
+    for (const n of song.notes) counts.set(key(n), (counts.get(key(n)) ?? 0) + 1);
     this.noteEls = song.notes.map((n) => {
-      const g = noteGlyph({ ...n, midi: n.midi + this.octaveShift * 12 }, beat);
+      const g = noteGlyph(n, beat, n.hand === 'L', counts.get(key(n))! > 1);
       this.scroll.appendChild(g);
       return g;
     });

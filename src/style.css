@@ -198,8 +198,8 @@ body {
 .ptoggle.active .state { opacity: 1; }
 
 /* left-hand practice: mirror the guide hand, keep the digits readable */
-#hand.lefty svg { transform: scaleX(-1); }
-#hand.lefty svg text { transform: scaleX(-1); transform-box: fill-box; transform-origin: center; }
+.lefty svg { transform: scaleX(-1); }
+.lefty svg text { transform: scaleX(-1); transform-box: fill-box; transform-origin: center; }
 .menu-title { font-size: 40px; font-weight: 700; text-align: center; }
 .menu-sub { text-align: center; opacity: 0.85; margin: 6px 0 30px; font-size: 18px; }
 #profiles {
@@ -227,7 +227,8 @@ body {
 .profile .pavatar { font-size: 22px; }
 .profile.add { padding: 8px 16px; font-size: 20px; font-weight: 700; }
 
-#courses { display: grid; gap: 26px; max-width: 860px; margin: 0 auto; }
+#courses { display: grid; gap: 12px; max-width: 860px; margin: 0 auto; }
+.course-head { font-size: 22px; font-weight: 700; margin: 16px 0 2px; }
 #songsList { display: grid; gap: 12px; max-width: 860px; margin: 0 auto; }
 .course h2 { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
 .lesson-list { display: grid; gap: 10px; }
@@ -297,6 +298,8 @@ header {
 header h1 { font-size: 22px; font-weight: 500; }
 
 #sources { display: flex; gap: 8px; }
+.srcmenu { position: relative; display: flex; align-items: center; }
+#srcToggle { display: none; } /* desktop: sources sit inline, no hamburger */
 button {
   font-family: inherit;
   cursor: pointer;
@@ -314,6 +317,20 @@ button {
 .src:hover:not(:disabled), .opt:hover { transform: translateY(-2px); }
 .src:disabled { opacity: 0.45; cursor: not-allowed; }
 .src.active, .opt.active { background: var(--accent); color: #063a2d; font-weight: 600; }
+
+#handsMode { display: flex; gap: 8px; }
+#handsMode.hidden { display: none; }
+.hnd {
+  font-size: 14px;
+  padding: 9px 14px;
+  border-radius: 20px;
+  background: rgba(20, 8, 46, 0.35);
+  color: #fff;
+  transition: transform 0.08s ease;
+}
+.hnd:hover:not(:disabled) { transform: translateY(-2px); }
+.hnd:disabled { opacity: 0.4; cursor: not-allowed; }
+.hnd.active { background: var(--accent); color: #063a2d; font-weight: 600; }
 
 #speed { display: flex; align-items: center; gap: 6px; font-size: 17px; }
 #speed input { width: 90px; accent-color: var(--accent); cursor: pointer; }
@@ -531,25 +548,31 @@ main {
 #micReadout.hidden { display: none; }
 
 /* ---------- Finger-guide hand ---------- */
-#hand {
+#hands {
   align-self: center; /* sits in flow, centered under the loop hint */
-  width: 118px;
   pointer-events: none;
   z-index: 6;
+  display: flex;
+  gap: 24px;
+  align-items: flex-end;
+}
+#handL, #handR {
+  width: 118px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
 }
-#hand svg { width: 100%; filter: drop-shadow(0 6px 12px rgba(20, 8, 46, 0.35)); }
-#hand .palm, #hand .fng rect { fill: #ffd9b0; stroke: #d9a066; stroke-width: 2.5; }
-#hand .fng text {
+#handL.hidden, #handR.hidden { display: none; }
+#hands svg { width: 100%; filter: drop-shadow(0 6px 12px rgba(20, 8, 46, 0.35)); }
+#hands .palm, #hands .fng rect { fill: #ffd9b0; stroke: #d9a066; stroke-width: 2.5; }
+#hands .fng text {
   font: 700 13px 'Poppins', sans-serif;
   fill: #8a5a2b;
   text-anchor: middle;
 }
-#hand .fng.on rect { fill: var(--accent); stroke: #00a97f; }
-#hand .fng.on text { fill: #063a2d; }
+#hands .fng.on rect { fill: var(--accent); stroke: #00a97f; }
+#hands .fng.on text { fill: #063a2d; }
 .fbadge {
   background: var(--overlay);
   color: #fff;
@@ -614,6 +637,7 @@ main {
 .lines line, .clef-group line { stroke: #111; stroke-width: 3; }
 .clef-bg { fill: #fcfcff; }
 .clef { font-size: 180px; fill: #111; font-family: 'Noto Music', 'Apple Symbols', 'Segoe UI Symbol', serif; }
+.clef.bass { font-size: 150px; }
 .cursor {
   fill: rgba(0, 210, 160, 0.22);
   stroke: var(--accent);
@@ -775,8 +799,39 @@ main {
   .src { font-size: 13px; padding: 7px 10px; }
   #lessons { padding: 0 12px 4px; }
   #kb { height: clamp(92px, 30vh, 150px); }
-  #hand { width: 84px; }
   #loopHint { display: none; }
+
+  /* sources collapse into a ☰ dropdown to keep the header on one row */
+  #srcToggle { display: inline-flex; align-items: center; justify-content: center; }
+  #sources {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 30;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    background: var(--overlay);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  }
+  #sources.open { display: flex; }
+
+  /* hand guide docks in the top-right corner (overflowing it), freeing the
+     column space it used so the notes fill the full height */
+  .sheet { flex: 1 1 auto; }
+  #hands {
+    position: absolute;
+    top: -8px;
+    right: 4px;
+    align-self: auto;
+    gap: 8px;
+    z-index: 7;
+    opacity: 0.92;
+  }
+  #handL, #handR { width: 64px; }
+  #hands .fbadge { display: none; } /* no room for the text badge in the corner */
 }
 
 /* Popups/overlays: sized for desktop by default — wrap text and cap width so

@@ -781,8 +781,15 @@ function renderDrills() {
 
 function renderSongs() {
   songsListEl.innerHTML = '';
+  let duetHead = false;
   SONGS.forEach((s, si) => {
     if (s.category !== 'songs') return; // keep the true SONGS index for openSection
+    if (!duetHead && s.sections[0].song.notes.some((n) => n.hand === 'L')) {
+      const h = document.createElement('h3');
+      h.textContent = '🙌 Both hands';
+      songsListEl.appendChild(h);
+      duetHead = true;
+    }
     const whole = starsOf(getPoints(s.id, s.sections.length - 1));
     const b = document.createElement('button');
     b.className = 'lesson-row';

@@ -167,17 +167,57 @@ function twoHandEntry(id: string, emoji: string, title: string, phrases: HandPhr
 }
 
 const songLibrary: SongEntry[] = [
-  // --- kids rhymes (public domain), with soft I-IV-V bass backing ---
-  one('itsy-spider', '🕷️', 'Itsy Bitsy Spider', [...q(G, C, C, C, D, E, E, E, D, C, D, E), [C, 2]],
-    [[REST, 1], [C3, 4], [C3, 4], [G3, 3], [C3, 2]]),
-  one('wheels-bus', '🚌', 'Wheels on the Bus', [...q(C, F, F, F, A, C5, A, F, G, E), [C, 2]],
-    [[REST, 1], [F3, 4], [F3, 3], [C3, 2], [F3, 2]]),
-  one('if-happy', '😄', "If You're Happy", [...q(C, F, F, F, F, E, F), [G, 2]],
-    [[REST, 1], [F3, 4], [F3, 2], [C3, 2]]),
+  // --- kids rhymes (public domain), full verses, soft I-IV-V bass backing ---
+  one('itsy-spider', '🕷️', 'Itsy Bitsy Spider', [
+    // up the spout · down came the rain · out came the sun · up again
+    [G3, 1], [C, 0.5], [C, 0.5], [C, 0.5], [D, 0.5], [E, 0.5], [E, 0.5], [E, 1], [D, 1], [C, 1], [D, 0.5], [E, 0.5], [C, 2],
+    [E, 1], [E, 1], [F, 1], [G, 2], [G, 1], [F, 1], [E, 1], [F, 0.5], [G, 0.5], [E, 2],
+    [C, 1], [C, 1], [D, 1], [E, 2], [E, 1], [D, 1], [C, 1], [D, 0.5], [E, 0.5], [C, 2],
+    [G3, 0.5], [G3, 0.5], [C, 0.5], [C, 0.5], [C, 0.5], [D, 0.5], [E, 0.5], [E, 0.5], [E, 1], [D, 1], [C, 1], [D, 0.5], [E, 0.5], [C, 2],
+  ], [
+    [C3, 4], [C3, 2], [G3, 2], [C3, 2],
+    [C3, 4], [G3, 4], [C3, 3],
+    [C3, 4], [C3, 2], [G3, 3], [C3, 2],
+    [C3, 4], [C3, 2], [G3, 2], [C3, 2],
+  ]),
+  one('wheels-bus', '🚌', 'Wheels on the Bus', [
+    // round and round ×3 · all through the town
+    [C, 1], [F, 1], [F, 1], [F, 1], [F, 1], [A, 1], [C5, 1], [A, 1], [F, 2], [G, 1], [E, 1], [C, 2], [A, 1], [G, 1], [F, 2],
+    [C, 1], [F, 1], [F, 1], [F, 1], [F, 1], [A, 1], [C5, 1], [A, 1], [F, 2], [G, 1], [C, 1], [C, 1], [F, 2],
+  ], [
+    [REST, 1], [F3, 4], [F3, 5], [C3, 4], [F3, 4],
+    [REST, 1], [F3, 4], [F3, 5], [C3, 3], [F3, 2],
+  ]),
+  one('if-happy', '😄', "If You're Happy", [
+    // clap your hands · clap your hands · really want to show it · clap your hands
+    [C, 0.5], [C, 0.5], [F, 0.5], [F, 0.5], [F, 0.5], [F, 0.5], [F, 1], [E, 1], [F, 1], [G, 2],
+    [C, 0.5], [C, 0.5], [G, 0.5], [G, 0.5], [G, 0.5], [G, 0.5], [G, 1], [F, 1], [G, 1], [A, 2],
+    [F, 0.5], [F, 0.5], [AS, 0.5], [AS, 0.5], [AS, 0.5], [AS, 0.5], [D5, 1], [D5, 1], [AS, 0.5], [AS, 0.5], [A, 0.5], [A, 0.5], [A, 1], [G, 1], [F, 1], [F, 2],
+    [A, 0.5], [A, 0.5], [G, 0.5], [G, 0.5], [G, 1], [F, 1], [E, 1], [E, 1], [D, 1], [E, 1], [F, 2],
+  ], [
+    [REST, 1], [F3, 3], [C3, 4],
+    [REST, 1], [F3, 3], [C3, 2], [F3, 2],
+    [AS3, 4], [AS3, 2], [F3, 2], [C3, 2], [F3, 2],
+    [F3, 2], [F3, 2], [C3, 2], [C3, 2], [F3, 2],
+  ]),
   one('this-old-man', '👴', 'This Old Man', [...q(G, E, G, G, E, G, A, G, F, E), [D, 2]],
     [[C3, 6], [F3, 4], [G3, 2]]),
-  one('bingo', '🐕', 'Bingo', [...q(G, G, E, G, G, E, A, A, G, F, E), [D, 2]],
-    [[C3, 6], [F3, 3], [C3, 2], [G3, 2]]),
+  one('bingo', '🐕', 'Bingo', [
+    // farmer had a dog · and Bingo was his name-o · B-I-N-G-O ×3 · name-o!
+    [G3, 1], [C, 1], [C, 1], [C, 1], [G3, 1], [A3, 1], [A3, 1], [G3, 2],
+    [G3, 1], [C, 1], [C, 1], [D, 1], [D, 1], [E, 1], [C, 2],
+    [E, 1], [E, 1], [F, 1], [F, 1], [F, 2],
+    [D, 1], [D, 1], [E, 1], [E, 1], [E, 2],
+    [C, 1], [C, 1], [D, 1], [D, 1], [D, 2],
+    [B3, 1], [G3, 1], [A3, 1], [B3, 1], [C, 1], [C, 2],
+  ], [
+    [C3, 5], [F3, 2], [C3, 2],
+    [C3, 3], [G3, 2], [C3, 3],
+    [C3, 2], [F3, 4],
+    [G3, 2], [C3, 4],
+    [C3, 2], [G3, 4],
+    [G3, 4], [C3, 3],
+  ]),
   one('rain-away', '☔', 'Rain Rain Go Away', [...q(G, E, G, E, A, G), [E, 2]],
     [[C3, 2], [C3, 2], [F3, 2], [C3, 2]]),
   // --- famous themes (short recognisable melody lines) ---
@@ -197,7 +237,47 @@ const songLibrary: SongEntry[] = [
   one('pirates', '🏴‍☠️', "He's a Pirate", [[D, 1], [F, 1], [G, 1], [G, 2], [G, 1], [A, 1], [AS, 1], [AS, 2], [AS, 1], [C5, 1], [D5, 1], [C5, 1], [AS, 1], [A, 1], [G, 1], [A, 2]]),
   one('got', '🐉', 'Game of Thrones', [...q(G3, C, DS, F, G3, C, DS, F, G3, C, E), [F, 2]]),
   one('tetris', '🧱', 'Tetris', [[E, 1], [B, 0.5], [C5, 0.5], [D5, 1], [C5, 0.5], [B, 0.5], [A, 1], [A, 0.5], [C5, 0.5], [E5, 1], [D5, 0.5], [C5, 0.5], [B, 1.5], [C5, 0.5], [D5, 1], [E, 1], [C5, 1], [A, 1], [A, 2]]),
+  ...duets(),
 ];
+
+/** Both-hands songs: full-length melodies with a left-hand bass part the kid
+ *  can actually play — R/L/Both toggle applies (R = bass auto-plays along). */
+function duets(): SongEntry[] {
+  const duet = (id: string, emoji: string, title: string, r: Pair[], l: Pair[]): SongEntry =>
+    ({ id, emoji, title, category: 'songs', sections: [{ title: 'The song', song: hands(title, r, l) }] });
+
+  // per-line bass for Twinkle (each melody line is 8 beats)
+  const tw1l: Pair[] = [[C3, 4], [F3, 2], [C3, 2]];
+  const tw2l: Pair[] = [[F3, 2], [C3, 2], [G3, 2], [C3, 2]];
+  const tw3l: Pair[] = [[C3, 2], [F3, 2], [C3, 2], [G3, 2]];
+
+  const macP1: Pair[] = [...q(C, C, C, G, A, A), [G, 2], ...q(E, E, D, D), [C, 2]];
+  const macP2: Pair[] = [...q(G, C, C, C, G, A, A), [G, 2], ...q(E, E, D, D), [C, 2]];
+  const macMoo: Pair[] = [
+    [G, 0.5], [G, 0.5], [C, 1], [C, 1], [C, 1],   // with a moo moo here
+    [G, 0.5], [G, 0.5], [C, 1], [C, 1], [C, 1],   // and a moo moo there
+    [C, 1], [C, 0.5], [C, 0.5], [C, 1], [C, 0.5], [C, 0.5], // here a moo, there a moo
+    [C, 0.5], [C, 0.5], [C, 0.5], [C, 0.5], [C, 1], [C, 1], // everywhere a moo moo
+  ];
+  const macP1l: Pair[] = [[C3, 8], [F3, 2], [G3, 2], [C3, 2]];
+  const macP2l: Pair[] = [[REST, 1], [C3, 8], [F3, 2], [G3, 2], [C3, 2]];
+
+  return [
+    duet('duet-twinkle', '⭐', 'Twinkle Twinkle',
+      [...TW1, ...TW2, ...TW3, ...TW3, ...TW1, ...TW2],
+      [...tw1l, ...tw2l, ...tw3l, ...tw3l, ...tw1l, ...tw2l]),
+    duet('duet-macdonald', '🚜', 'Old MacDonald',
+      [...macP1, ...macP2, ...macMoo, ...macP1],
+      [...macP1l, ...macP2l, [C3, 4], [C3, 4], [C3, 4], [C3, 4], ...macP1l]),
+    duet('duet-mary', '🐑', 'Mary Had a Little Lamb',
+      [...q(E, D, C, D, E, E), [E, 2], ...q(D, D), [D, 2], ...q(E, G), [G, 2], ...q(E, D, C, D, E, E, E, E, D, D, E, D), [C, 4]],
+      [[C3, 4], [C3, 4], [G3, 4], [C3, 4], [C3, 4], [C3, 4], [G3, 4], [C3, 4]]),
+    duet('duet-london', '🌉', 'London Bridge',
+      [[G, 1.5], [A, 0.5], ...q(G, F, E, F), [G, 2], ...q(D, E), [F, 2], ...q(E, F), [G, 2],
+       [G, 1.5], [A, 0.5], ...q(G, F, E, F), [G, 2], [D, 2], [G, 2], [E, 1], [C, 3]],
+      [[C3, 4], [C3, 4], [G3, 4], [C3, 4], [C3, 4], [C3, 4], [G3, 2], [C3, 2], [C3, 4]]),
+  ];
+}
 
 /* ---------- two-hand track: concept intro + a 6-lesson coordination ladder,
    each new lesson adds exactly one left-hand skill ---------- */

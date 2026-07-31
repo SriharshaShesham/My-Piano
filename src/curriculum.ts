@@ -181,12 +181,12 @@ const songLibrary: SongEntry[] = [
     [C3, 4], [C3, 2], [G3, 2], [C3, 2],
   ]),
   one('wheels-bus', '🚌', 'Wheels on the Bus', [
-    // round and round ×3 · all through the town
-    [C, 1], [F, 1], [F, 1], [F, 1], [F, 1], [A, 1], [C5, 1], [A, 1], [F, 2], [G, 1], [E, 1], [C, 2], [A, 1], [G, 1], [F, 2],
-    [C, 1], [F, 1], [F, 1], [F, 1], [F, 1], [A, 1], [C5, 1], [A, 1], [F, 2], [G, 1], [C, 1], [C, 1], [F, 2],
+    // round and round ×3 · all through the town — "on the" are quick eighths
+    [C, 1], [F, 1], [F, 0.5], [F, 0.5], [F, 1], [A, 1], [C5, 1], [A, 1], [F, 2], [G, 1], [E, 1], [C, 2], [A, 1], [G, 1], [F, 2],
+    [C, 1], [F, 1], [F, 0.5], [F, 0.5], [F, 1], [A, 1], [C5, 1], [A, 1], [F, 2], [G, 1], [C, 1], [C, 1], [F, 2],
   ], [
-    [REST, 1], [F3, 4], [F3, 5], [C3, 4], [F3, 4],
-    [REST, 1], [F3, 4], [F3, 5], [C3, 3], [F3, 2],
+    [REST, 1], [F3, 4], [F3, 4], [C3, 4], [F3, 4],
+    [REST, 1], [F3, 4], [F3, 4], [C3, 3], [F3, 2],
   ]),
   one('if-happy', '😄', "If You're Happy", [
     // clap your hands · clap your hands · really want to show it · clap your hands
@@ -204,19 +204,20 @@ const songLibrary: SongEntry[] = [
     [[C3, 6], [F3, 4], [G3, 2]]),
   one('bingo', '🐕', 'Bingo', [
     // farmer had a dog · and Bingo was his name-o · B-I-N-G-O ×3 · name-o!
-    [G3, 1], [C, 1], [C, 1], [C, 1], [G3, 1], [A3, 1], [A3, 1], [G3, 2],
-    [G3, 1], [C, 1], [C, 1], [D, 1], [D, 1], [E, 1], [C, 2],
+    // "was a" / "had a" / "was his" are quick eighths, like it's sung
+    [G3, 1], [C, 0.5], [C, 0.5], [C, 1], [G3, 1], [A3, 0.5], [A3, 0.5], [G3, 2],
+    [G3, 1], [C, 1], [C, 1], [D, 0.5], [D, 0.5], [E, 1], [C, 2],
     [E, 1], [E, 1], [F, 1], [F, 1], [F, 2],
     [D, 1], [D, 1], [E, 1], [E, 1], [E, 2],
     [C, 1], [C, 1], [D, 1], [D, 1], [D, 2],
-    [B3, 1], [G3, 1], [A3, 1], [B3, 1], [C, 1], [C, 2],
+    [B3, 1], [G3, 1], [A3, 0.5], [B3, 0.5], [C, 1], [C, 2],
   ], [
-    [C3, 5], [F3, 2], [C3, 2],
-    [C3, 3], [G3, 2], [C3, 3],
+    [C3, 4], [F3, 1], [C3, 2],
+    [C3, 3], [G3, 2], [C3, 2],
     [C3, 2], [F3, 4],
     [G3, 2], [C3, 4],
     [C3, 2], [G3, 4],
-    [G3, 4], [C3, 3],
+    [G3, 3], [C3, 3],
   ]),
   one('rain-away', '☔', 'Rain Rain Go Away', [...q(G, E, G, E, A, G), [E, 2]],
     [[C3, 2], [C3, 2], [F3, 2], [C3, 2]]),

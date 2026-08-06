@@ -13,6 +13,7 @@ export class Coach {
   enabled = true;
   private video: HTMLVideoElement;
   private resolveFn: (() => void) | null = null;
+  private lastEnd = 0; // when the previous clip finished — no two clips back-to-back
 
   constructor(private el: HTMLElement) {
     el.classList.add('hidden');
@@ -28,9 +29,12 @@ export class Coach {
   /** Mic mode keeps the app silent — animation only. */
   set muted(m: boolean) { this.video.muted = m; }
 
-  /** Fly in and play a clip; resolves when it ends or is skipped/stopped. */
+  /** Fly in and play a clip; resolves when it ends or is skipped/stopped.
+   *  A clip requested right after another just finished is skipped — the
+   *  character must never talk twice in a row. */
   play(name: ClipName): Promise<void> {
     if (!this.enabled) return Promise.resolve(); // videos off → flow falls through
+    if (performance.now() - this.lastEnd < 1500) return Promise.resolve();
     this.stop(); // resolve any clip still pending
     this.el.classList.remove('hidden');
     this.video.src = clipUrl(name);
@@ -39,6 +43,7 @@ export class Coach {
   }
 
   stop() {
+    if (this.resolveFn) this.lastEnd = performance.now(); // a clip actually ran
     this.video.pause();
     this.el.classList.add('hidden');
     this.resolveFn?.();

@@ -382,11 +382,19 @@ async function runQuiz(): Promise<number | null> {
   return pts;
 }
 
-/** Generate an excited intro from the section's actually-new notes. */
+/** Generate an excited intro from the section's actually-new notes.
+ *  "New" is per kid, not per song: a key taught in any completed section
+ *  anywhere in the curriculum is never introduced as brand new again. */
 function buildIntro(si: number, sec: number): TutorScript {
   const s = SONGS[si];
   const seen = new Set<number>();
-  for (let i = 0; i < sec; i++) s.sections[i].song.notes.forEach((n) => seen.add(n.midi));
+  for (const s2 of SONGS) {
+    s2.sections.forEach((section, i) => {
+      if ((s2.id === s.id && i < sec) || getPoints(s2.id, i) > 0) {
+        section.song.notes.forEach((n) => { if (!n.backing) seen.add(n.midi); });
+      }
+    });
+  }
   const uniq = [...new Set(s.sections[sec].song.notes.map((n) => n.midi))];
   const fresh = uniq.filter((m) => !seen.has(m)).slice(0, 4);
   const list = (a: string[]) =>

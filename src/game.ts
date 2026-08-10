@@ -65,7 +65,6 @@ export class Game {
 
   get playing() { return this._playing; }
   get position() { return this.now(); }
-  get isDemo() { return this.demoMode; }
 
   loadSong(song: Song) {
     this.stopDemo(); // a demo from the previous section must not leak into this one

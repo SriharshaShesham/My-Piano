@@ -62,9 +62,16 @@ function clearAuto() { clearTimeout(autoT); clearInterval(autoT); }
 const starsOf = (pts: number) => Math.round((pts / 20) * 3);
 const starStr = (n: number) => '⭐'.repeat(n) + '☆'.repeat(3 - n);
 
+const cheered = new Set<number>();
 function showScore(h: number, t: number) {
   progressText.textContent = `${h}/${t}`;
   progressFill.style.width = t ? `${(h / t) * 100}%` : '0%';
+  if (h === 0) { cheered.clear(); return; }
+  // mid-song company: the coach pops in at 1/3 (listening nod) and 2/3
+  // (good job) of longer pieces — non-blocking, the music keeps going
+  if (game.isDemo || quizOn || t < 12 || cheered.has(h)) return;
+  if (h === Math.ceil(t / 3)) { cheered.add(h); coach.play('ListeningNod'); }
+  else if (h === Math.ceil((2 * t) / 3)) { cheered.add(h); coach.play('GoodJob'); }
 }
 
 async function restart() {

@@ -29,9 +29,9 @@ Wiring (already done, for reference):
 
 ## Google OAuth (one-time, enables the Sign-in-with-Google button)
 
-1. console.cloud.google.com → new project (e.g. "Piano Kids") →
+1. console.cloud.google.com → new project (e.g. "MyPiano") →
    APIs & Services → Library → enable **Google Drive API**.
-2. OAuth consent screen: **External**; app name "Piano Kids"; add your own
+2. OAuth consent screen: **External**; app name "MyPiano"; add your own
    email as a test user. (Publish the app later to let anyone sign in.)
 3. Credentials → Create credentials → **OAuth client ID** → Web application:
    - Authorized JavaScript origins:

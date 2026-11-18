@@ -1,13 +1,13 @@
 # Deployment
 
-Source lives in the repo `piano-kids`. Every push to `main` runs
+Source lives in the repo `My-Piano`. Every push to `main` runs
 `.github/workflows/deploy.yml`, which builds the site and force-publishes
 `dist/` to the public repo **SriharshaShesham/MyPiano** (single orphan
 commit), which GitHub Pages serves at **https://mypiano.srichakram.in**.
 
 Wiring (already done, for reference):
 - Deploy key with write access on MyPiano; private half stored as the
-  `ACTIONS_DEPLOY_KEY` secret in piano-kids.
+  `ACTIONS_DEPLOY_KEY` secret in My-Piano.
 - The workflow writes a `CNAME` file (`mypiano.srichakram.in`) into the
   published output — that's what sets the Pages custom domain.
 - Manual deploy: Actions tab → "Deploy to MyPiano" → Run workflow.
@@ -40,7 +40,7 @@ Wiring (already done, for reference):
    - No redirect URIs (the app uses the token flow).
 4. Local dev: create `.env.local` at the repo root (git-ignored):
    `VITE_GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com`
-5. Production: store the same value as an Actions secret in piano-kids —
+5. Production: store the same value as an Actions secret in My-Piano —
    `gh secret set VITE_GOOGLE_CLIENT_ID` — then re-run the deploy workflow.
 
 Without the client ID the app works fully with local profiles only; the

@@ -27,6 +27,11 @@ jobs:
           # optional: empty → Google sign-in hidden, app runs local-only
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
+      # public repo page: README + the screenshots it links to
+      - run: |
+          cp README.md dist/
+          mkdir -p dist/docs && cp -r docs/screenshots dist/docs/
+
       - uses: peaceiris/actions-gh-pages@v4
         with:
           deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}

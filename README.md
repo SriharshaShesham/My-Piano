@@ -54,6 +54,10 @@ Other scripts: `npm run build`, `npm run preview`, `npm run check` (type-check) 
 
 To turn on Google sign-in, add `VITE_GOOGLE_CLIENT_ID=…` to `.env.local`. Without it the app works fully with local profiles. See [DEPLOY.md](DEPLOY.md) for the OAuth setup and how pushes to `main` publish the site.
 
+## License
+
+The code is under the [MIT License](LICENSE).
+
 ---
 
 <sub>Mic detection hears one note at a time. To play chords, use USB MIDI or the on-screen keys.</sub>

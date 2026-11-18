@@ -1,6 +1,6 @@
 # Deployment
 
-Source lives in the private repo (`piano-kids`). Every push to `main` runs
+Source lives in the repo `piano-kids`. Every push to `main` runs
 `.github/workflows/deploy.yml`, which builds the site and force-publishes
 `dist/` to the public repo **SriharshaShesham/MyPiano** (single orphan
 commit), which GitHub Pages serves at **https://mypiano.srichakram.in**.

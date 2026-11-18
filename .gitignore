@@ -4,3 +4,13 @@ dist
 output
 *.local
 ref
+# local-only planning / asset-generation notes
+plan.md
+prompts.md
+sounds.md
+prompts_input.csv
+voices_input.csv
+graphify-out
+assets/Gemini_Generated_Image_*.png
+assets/character*.png
+.DS_Store

@@ -54,6 +54,39 @@ Other scripts: `npm run build`, `npm run preview`, `npm run check` (type-check) 
 
 To turn on Google sign-in, add `VITE_GOOGLE_CLIENT_ID=…` to `.env.local`. Without it the app works fully with local profiles. See [DEPLOY.md](DEPLOY.md) for the OAuth setup and how pushes to `main` publish the site.
 
+## Host your own copy on GitHub Pages
+
+The live site is hosted on GitHub Pages, and you can host your own copy the same way, for free. The app builds with relative paths, so it works at `https://<you>.github.io/My-Piano/` with no config changes.
+
+1. **Fork** this repo, then open the **Actions** tab in your fork and enable workflows.
+2. In your fork, edit [.github/workflows/deploy.yml](.github/workflows/deploy.yml):
+   - Give the job write access by adding `permissions:` under `deploy:`:
+     ```yaml
+     jobs:
+       deploy:
+         permissions:
+           contents: write
+         runs-on: ubuntu-latest
+     ```
+   - Replace the last step (`peaceiris/actions-gh-pages`) so it publishes to a `gh-pages` branch in your own fork:
+     ```yaml
+           - uses: peaceiris/actions-gh-pages@v4
+             with:
+               github_token: ${{ secrets.GITHUB_TOKEN }}
+               publish_dir: ./dist
+               force_orphan: true
+     ```
+3. Commit the change to `main`. The workflow type-checks, tests, builds and publishes the site.
+4. Go to **Settings → Pages**, set **Source** to **Deploy from a branch**, and pick `gh-pages` / `/ (root)`.
+5. After a minute or so, your copy is live at `https://<you>.github.io/My-Piano/`.
+
+**Optional:**
+- **Custom domain:** add `cname: piano.example.com` to the publish step and point a DNS `CNAME` record at `<you>.github.io`.
+- **Google sign-in:** add a `VITE_GOOGLE_CLIENT_ID` Actions secret, and add your site's address as an authorized origin.
+- **Separate site repo:** this repo publishes to a separate repo, [MyPiano](https://github.com/SriharshaShesham/MyPiano), using a deploy key. That keeps the built site apart from the source.
+
+[DEPLOY.md](DEPLOY.md) has the full steps for the optional extras.
+
 ## License
 
 The code is under the [MIT License](LICENSE).

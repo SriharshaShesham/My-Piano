@@ -27,9 +27,9 @@ jobs:
           # optional: empty → Google sign-in hidden, app runs local-only
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
-      # public repo page: README + the screenshots it links to
+      # public repo page: the Pages-repo README + the screenshots it links to
       - run: |
-          cp README.md dist/
+          cp .github/pages-README.md dist/README.md
           mkdir -p dist/docs && cp -r docs/screenshots dist/docs/
 
       - uses: peaceiris/actions-gh-pages@v4
